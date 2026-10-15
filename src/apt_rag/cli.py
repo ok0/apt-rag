@@ -10,7 +10,7 @@ from apt_rag import __version__
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
 from apt_rag.search import Searcher
-from apt_rag.service import build_index, inspect_pdf
+from apt_rag.service import build_index, evaluate, inspect_pdf
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -125,6 +125,32 @@ def _cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_eval(args: argparse.Namespace) -> int:
+    csv_path = Path(args.csv)
+    if not csv_path.exists():
+        print(f"파일을 찾을 수 없습니다: {csv_path}", file=sys.stderr)
+        return 1
+    settings = load_settings()
+    try:
+        result = evaluate(csv_path, settings, k=args.k)
+    except (FileNotFoundError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+        return 0
+    print(f"hit@{result.k}: {result.hits}/{result.total} = {result.hit_rate:.1%}")
+    if result.failures:
+        print(f"실패 {len(result.failures)}건:")
+        for failure in result.failures:
+            print(
+                f"- Q: {failure.question} / 정답: {', '.join(failure.expected)} / "
+                f"상위{result.k}: {', '.join(failure.got)}"
+            )
+    print(f"저장: {settings.work_dir / 'eval'}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -134,5 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_index(args)
     if args.command == "search":
         return _cmd_search(args)
+    if args.command == "eval":
+        return _cmd_eval(args)
     print("미구현")
     return 2

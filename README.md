@@ -28,7 +28,7 @@ uv run apt-rag eval <csv> [-k 5] [--json]
 - `inspect`: 쪽별 텍스트/이미지 판별 결과와 OCR 필요 쪽을 보여줍니다.
 - `index`: PDF를 추출, 청크화, 검증한 뒤 색인을 만듭니다. `--no-embed`는 임베딩을 생략합니다. `--strict`는 검증 오류가 있으면 실패합니다.
 - `search`: 색인에서 질의에 맞는 조항을 검색합니다.
-- `eval`: 질문 CSV로 검색 적중률을 측정합니다.
+- `eval`: 질문 CSV로 hit@k 검색 적중률을 측정합니다. CSV는 UTF-8이며 `question,expected_article` 컬럼이 필요합니다. 정답 조문이 여러 개면 `;`로 구분하며, 상위 k개 중 하나라도 맞으면 적중입니다. 샘플은 `eval/sample_questions.csv`(15문항)이고, 실제 평가용 30~50문항은 같은 형식으로 작성합니다.
 
 ## 3. 산출물 위치
 

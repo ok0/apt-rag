@@ -9,8 +9,9 @@ from pathlib import Path
 from apt_rag.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder
+from apt_rag.evaluate import evaluate_csv
 from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
-from apt_rag.models import Chunk, ExcludedSegment, ExtractResult, InspectReport, SearchHit, ValidationReport
+from apt_rag.models import Chunk, EvalResult, ExcludedSegment, ExtractResult, InspectReport, SearchHit, ValidationReport
 from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.pdfinspect import inspect_pdf_file
 from apt_rag.search import Searcher
@@ -158,3 +159,15 @@ def build_index(
 def search(query: str, settings: Settings, top_n: int = 5, searcher: Searcher | None = None) -> list[SearchHit]:
     searcher = searcher or Searcher(settings)
     return searcher.search(query, top_n=top_n)
+
+
+def evaluate(csv_path: Path, settings: Settings, k: int = 5, searcher: Searcher | None = None) -> EvalResult:
+    searcher = searcher or Searcher(settings)
+    result = evaluate_csv(Path(csv_path), searcher, k=k)
+    out_dir = settings.work_dir / "eval"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    (out_dir / f"eval-{stamp}.json").write_text(
+        json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return result
