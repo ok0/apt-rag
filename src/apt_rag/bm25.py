@@ -28,7 +28,10 @@ class BM25Index:
         self._bm25 = BM25Okapi(tokens)
 
     def search(self, query: str, top_k: int) -> list[tuple[str, float]]:
-        scores = self._bm25.get_scores(tokenize(query))
+        return self.search_tokens(tokenize(query), top_k)
+
+    def search_tokens(self, tokens: list[str], top_k: int) -> list[tuple[str, float]]:
+        scores = self._bm25.get_scores(tokens)
         ranked = sorted(
             ((cid, float(s)) for cid, s in zip(self.chunk_ids, scores) if s > 0),
             key=lambda x: x[1],

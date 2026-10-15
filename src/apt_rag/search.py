@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from apt_rag.bm25 import BM25Index
+from apt_rag.bm25 import BM25Index, tokenize
 from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder, Embedder
 from apt_rag.models import Chunk, SearchHit
+from apt_rag.synonyms import Synonyms, load_synonyms
 from apt_rag.store import load_index
 
 RRF_K = 60
@@ -19,14 +20,19 @@ def rrf(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
 
 
 class Searcher:
-    def __init__(self, settings: Settings, embedder: Embedder | None = None) -> None:
+    def __init__(
+        self, settings: Settings, embedder: Embedder | None = None, synonyms: Synonyms | None = None
+    ) -> None:
         self._settings = settings
         self._embedder = embedder
+        self._synonyms = synonyms
         self._loaded = None
 
     def _ensure(self):
         if self._loaded is None:
             collection, chunks, bm25, manifest = load_index(self._settings)
+            if self._synonyms is None:
+                self._synonyms = load_synonyms(self._settings.synonyms_path)
             if self._embedder is None:
                 self._embedder = BgeM3Embedder(self._settings)
             if self._embedder.model_name != manifest["embed_model"]:
@@ -50,7 +56,8 @@ class Searcher:
         vec_ids = [cid for cid in ids if cutoff <= 0 or sims[cid] >= cutoff]
         if cutoff > 0 and not vec_ids:
             return []
-        bm_ids = [cid for cid, _ in bm25.search(query, CANDIDATES)]
+        bm_tokens = self._synonyms.expand_tokens(tokenize(query))
+        bm_ids = [cid for cid, _ in bm25.search_tokens(bm_tokens, CANDIDATES)]
         scores = rrf([vec_ids, bm_ids])
         vec_rank = {cid: i for i, cid in enumerate(vec_ids, start=1)}
         vec_sim = {cid: sims[cid] for cid in vec_ids}

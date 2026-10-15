@@ -2,11 +2,13 @@ import dataclasses
 
 import pytest
 
+from apt_rag.bm25 import tokenize
 from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder
 from apt_rag.models import Chunk
 from apt_rag.search import Searcher, rrf
-from apt_rag.store import write_index
+from apt_rag.store import load_index, write_index
+from apt_rag.synonyms import Synonyms
 
 
 def make_chunk(seq, ref, text, paragraph_no=None):
@@ -169,3 +171,32 @@ def test_bm25_only_results_kept_when_cutoff_off(settings, hash_embedder):
     searcher = Searcher(settings, hash_embedder)
     refs = [h.article_ref for h in searcher.search("반려동물 사육 기준", 5, min_sim=0)]
     assert "제5조" in refs
+
+
+def test_bm25_search_tokens_matches_search(settings, hash_embedder):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제5조", "입주자는 반려동물을 사육할 수 있으며 사육 기준을 따른다."),
+        make_chunk(2, "제6조", "주차장 이용 시간은 별도로 정한다."),
+    ]
+    build(settings, hash_embedder, chunks)
+    _, _, bm, _ = load_index(settings)
+    assert bm.search("반려동물 사육", 5) == bm.search_tokens(tokenize("반려동물 사육"), 5)
+
+
+def test_synonym_questions_get_same_bm25_ranks(settings, hash_embedder):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제93조", "세대 발코니 관리 기준"),
+        make_chunk(2, "제19조", "발코니 수선 수선 공사 절차"),
+        make_chunk(3, "제6조", "주차장 이용 시간은 별도로 정한다."),
+        make_chunk(4, "제7조", "관리비 납부 기한을 정한다."),
+    ]
+    build(settings, hash_embedder, chunks)
+    s = Searcher(settings, hash_embedder, synonyms=Synonyms([["베란다", "발코니"]]))
+    q1 = "베란다 수선은 관리사무소에서 해주나요? 아니면 제가 하나요"
+    q2 = "발코니 수선은 관리사무소에서 해주나요? 아니면 제가 하나요"
+    r1 = {h.chunk_id: h.bm25_rank for h in s.search(q1, 10, min_sim=0)}
+    r2 = {h.chunk_id: h.bm25_rank for h in s.search(q2, 10, min_sim=0)}
+    assert r1 == r2
+    assert r1["d:0001"] is not None

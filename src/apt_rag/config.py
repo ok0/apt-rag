@@ -20,6 +20,7 @@ class Settings:
     ollama_url: str = "http://localhost:11434"
     llm_model: str = "qwen2.5:7b"
     min_vec_sim: float = 0.55
+    synonyms_path: Path | None = None
 
     @property
     def work_dir(self) -> Path:
@@ -50,6 +51,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         ollama_url=os.environ.get("APT_RAG_OLLAMA_URL", "http://localhost:11434"),
         llm_model=os.environ.get("APT_RAG_LLM_MODEL", "qwen2.5:7b"),
         min_vec_sim=float(os.environ.get("APT_RAG_MIN_VEC_SIM", "0.55")),
+        synonyms_path=Path(os.environ.get("APT_RAG_SYNONYMS", "synonyms.txt")).resolve(),
     )
 
 
