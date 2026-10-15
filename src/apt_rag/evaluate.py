@@ -36,13 +36,13 @@ def load_questions(csv_path: Path) -> list[tuple[str, list[str]]]:
     return [(q, cell) for q, cell in rows]
 
 
-def evaluate_csv(csv_path: Path, searcher, k: int = 5) -> EvalResult:
+def evaluate_csv(csv_path: Path, searcher, k: int = 5, min_sim: float | None = None) -> EvalResult:
     questions = load_questions(Path(csv_path))
     total = len(questions)
     hits = 0
     failures: list[EvalFailure] = []
     for question, cell in questions:
-        results = searcher.search(question, top_n=k)
+        results = searcher.search(question, top_n=k, min_sim=min_sim)
         got = [normalize_ref(h.article_ref) for h in results]
         expected = parse_expected(cell)
         if any(e in got for e in expected):

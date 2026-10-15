@@ -34,8 +34,9 @@ class Searcher:
             self._loaded = (collection, chunks, bm25)
         return self._loaded
 
-    def search(self, query: str, top_n: int = 5) -> list[SearchHit]:
+    def search(self, query: str, top_n: int = 5, min_sim: float | None = None) -> list[SearchHit]:
         collection, chunks, bm25 = self._ensure()
+        cutoff = self._settings.min_vec_sim if min_sim is None else min_sim
         n = min(CANDIDATES, collection.count())
         if n == 0:
             return []
@@ -44,10 +45,13 @@ class Searcher:
             n_results=n,
             include=["distances"],
         )
-        vec_ids = list(res["ids"][0])
+        ids = list(res["ids"][0])
+        sims = {cid: 1.0 - float(dist) for cid, dist in zip(ids, res["distances"][0])}
+        vec_ids = [cid for cid in ids if cutoff <= 0 or sims[cid] >= cutoff]
         bm_ids = [cid for cid, _ in bm25.search(query, CANDIDATES)]
         scores = rrf([vec_ids, bm_ids])
         vec_rank = {cid: i for i, cid in enumerate(vec_ids, start=1)}
+        vec_sim = {cid: sims[cid] for cid in vec_ids}
         bm_rank = {cid: i for i, cid in enumerate(bm_ids, start=1)}
         ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
         seen: set[str] = set()
@@ -70,6 +74,7 @@ class Searcher:
                     score=score,
                     vec_rank=vec_rank.get(cid),
                     bm25_rank=bm_rank.get(cid),
+                    vec_sim=vec_sim.get(cid),
                     chunk_id=cid,
                     text=chunk.text,
                 )

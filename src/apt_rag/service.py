@@ -163,9 +163,15 @@ def search(query: str, settings: Settings, top_n: int = 5, searcher: Searcher | 
     return searcher.search(query, top_n=top_n)
 
 
-def evaluate(csv_path: Path, settings: Settings, k: int = 5, searcher: Searcher | None = None) -> EvalResult:
+def evaluate(
+    csv_path: Path,
+    settings: Settings,
+    k: int = 5,
+    searcher: Searcher | None = None,
+    min_sim: float | None = None,
+) -> EvalResult:
     searcher = searcher or Searcher(settings)
-    result = evaluate_csv(Path(csv_path), searcher, k=k)
+    result = evaluate_csv(Path(csv_path), searcher, k=k, min_sim=min_sim)
     out_dir = settings.work_dir / "eval"
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")

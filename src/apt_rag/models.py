@@ -126,6 +126,7 @@ class SearchHit:
     score: float
     vec_rank: int | None
     bm25_rank: int | None
+    vec_sim: float | None
     chunk_id: str
     text: str
 

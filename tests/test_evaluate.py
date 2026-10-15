@@ -38,3 +38,16 @@ def test_missing_column_raises(settings, hash_embedder, tmp_path):
     csv_path.write_text("question,answer\n질문,제1조\n", encoding="utf-8")
     with pytest.raises(ValueError):
         evaluate_csv(csv_path, Searcher(settings, hash_embedder), k=5)
+
+
+def test_evaluate_cutoff_empty_result_is_failure(settings, hash_embedder, tmp_path):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제5조", "입주자는 반려동물을 사육할 수 있으며 사육 기준을 따른다."),
+    ]
+    build(settings, hash_embedder, chunks)
+    csv_path = tmp_path / "q.csv"
+    csv_path.write_text("question,expected_article\nxyz?,제5조\n", encoding="utf-8")
+    result = evaluate_csv(csv_path, Searcher(settings, hash_embedder), k=5, min_sim=0.5)
+    assert result.hits == 0
+    assert result.failures[0].got == []

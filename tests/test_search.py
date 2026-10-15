@@ -111,3 +111,38 @@ def test_bge_m3_real(tmp_path):
     sim_pet = sum(a * b for a, b in zip(query, docs[0]))
     sim_parking = sum(a * b for a, b in zip(query, docs[1]))
     assert sim_pet > sim_parking
+
+
+def test_cutoff_drops_vector_candidates(settings, hash_embedder):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제5조", "입주자는 반려동물을 사육할 수 있으며 사육 기준을 따른다."),
+    ]
+    build(settings, hash_embedder, chunks)
+    searcher = Searcher(settings, hash_embedder)
+    assert searcher.search("xyz", 5, min_sim=0.5) == []
+    assert len(searcher.search("xyz", 5, min_sim=0)) == 2
+
+
+def test_default_cutoff_comes_from_settings(settings, hash_embedder):
+    chunks = [make_chunk(0, "제1조", "이 규약은 목적을 정한다.")]
+    build(settings, hash_embedder, chunks)
+    strict = dataclasses.replace(settings, min_vec_sim=0.5)
+    assert Searcher(strict, hash_embedder).search("xyz", 5) == []
+
+
+def test_vec_sim_values_and_none_for_bm25_only(settings, hash_embedder):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제5조", "입주자는 반려동물을 사육할 수 있으며 사육 기준을 따른다."),
+        make_chunk(2, "제6조", "주차장 이용 시간은 별도로 정한다."),
+    ]
+    build(settings, hash_embedder, chunks)
+    searcher = Searcher(settings, hash_embedder)
+    hits = searcher.search(chunks[1].embed_text, 5, min_sim=0)
+    assert hits[0].article_ref == "제5조"
+    assert hits[0].vec_sim == pytest.approx(1.0, abs=1e-4)
+    assert all(-1.0 <= h.vec_sim <= 1.0 for h in hits if h.vec_sim is not None)
+    bm_only = searcher.search("반려동물 사육 기준", 5, min_sim=0.999)
+    assert bm_only
+    assert all(h.vec_sim is None and h.vec_rank is None for h in bm_only)

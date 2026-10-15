@@ -14,6 +14,12 @@ from apt_rag.search import Searcher
 from apt_rag.service import build_index, evaluate, generate_questions, inspect_pdf
 
 
+MIN_SIM_HELP = (
+    "벡터 유사도 컷오프, 코사인 유사도 하한 (0이면 끔, 기본 APT_RAG_MIN_VEC_SIM 또는 0.55)"
+)
+NO_HIT_MESSAGE = "관련 조항을 찾지 못했습니다. (관리사무소에 문의하세요)"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="apt-rag",
@@ -44,11 +50,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--top-n", type=int, default=5)
     p_search.add_argument("--excerpt", type=int, default=160)
     p_search.add_argument("--json", action="store_true")
+    p_search.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
 
     p_eval = sub.add_parser("eval", help="질문 CSV로 검색 적중률 평가")
     p_eval.add_argument("csv")
     p_eval.add_argument("-k", type=int, default=5)
     p_eval.add_argument("--json", action="store_true")
+    p_eval.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
 
     p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (로컬 ollama)")
     p_gen.add_argument("--count", type=int, default=40, help="질문을 만들 조항 수 (기본 40)")
@@ -133,19 +141,23 @@ def _cmd_index(args: argparse.Namespace) -> int:
 def _cmd_search(args: argparse.Namespace) -> int:
     settings = load_settings()
     try:
-        hits = Searcher(settings).search(args.query, top_n=args.top_n)
+        hits = Searcher(settings).search(args.query, top_n=args.top_n, min_sim=args.min_sim)
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     if args.json:
         print(json.dumps([asdict(h) for h in hits], ensure_ascii=False, indent=2))
         return 0
+    if not hits:
+        print(NO_HIT_MESSAGE)
+        return 0
     for hit in hits:
         pages = f"p.{hit.page_start}" + (f"-{hit.page_end}" if hit.page_end != hit.page_start else "")
         meta = [hit.part] + ([f"{hit.chapter}"] if hit.chapter else []) + [pages]
+        vec = f"vec #{hit.vec_rank} sim={hit.vec_sim:.2f}" if hit.vec_rank else "vec #-"
         print(
             f"{hit.rank}. {hit.article_ref} {hit.title}  [{' · '.join(meta)}]  "
-            f"score={hit.score:.4f} (vec #{hit.vec_rank or '-'}, bm25 #{hit.bm25_rank or '-'})"
+            f"score={hit.score:.4f} ({vec}, bm25 #{hit.bm25_rank or '-'})"
         )
         flat = " ".join(hit.text.split())
         print(f"   {flat[: args.excerpt]}…")
@@ -159,7 +171,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         return 1
     settings = load_settings()
     try:
-        result = evaluate(csv_path, settings, k=args.k)
+        result = evaluate(csv_path, settings, k=args.k, min_sim=args.min_sim)
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

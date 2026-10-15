@@ -19,6 +19,7 @@ class Settings:
     ocr: str
     ollama_url: str = "http://localhost:11434"
     llm_model: str = "qwen2.5:7b"
+    min_vec_sim: float = 0.55
 
     @property
     def work_dir(self) -> Path:
@@ -48,6 +49,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         ocr=os.environ.get("APT_RAG_OCR", "none"),
         ollama_url=os.environ.get("APT_RAG_OLLAMA_URL", "http://localhost:11434"),
         llm_model=os.environ.get("APT_RAG_LLM_MODEL", "qwen2.5:7b"),
+        min_vec_sim=float(os.environ.get("APT_RAG_MIN_VEC_SIM", "0.55")),
     )
 
 
