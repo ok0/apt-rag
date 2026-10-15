@@ -1,8 +1,10 @@
 import pytest
 
 import apt_rag.cli as cli
+from apt_rag.answer import DISCLAIMER, NO_HIT_ANSWER
 from apt_rag.cli import main
-from apt_rag.models import SearchHit
+from apt_rag.llm import OllamaConnectionError
+from apt_rag.models import AnswerResult, ChatTurn, SearchHit
 
 
 def test_help_exits_zero():
@@ -14,7 +16,7 @@ def test_help_exits_zero():
 def test_help_command_lists_commands(capsys):
     assert main(["help"]) == 0
     out = capsys.readouterr().out
-    assert "inspect" in out and "search" in out and "help" in out
+    assert "inspect" in out and "search" in out and "help" in out and "ask" in out
 
 
 def test_help_command_for_subcommand(capsys):
@@ -125,3 +127,143 @@ def test_band_options_override_settings(monkeypatch, settings):
     monkeypatch.setattr(cli, "load_settings", lambda: settings)
     assert main(["search", "q", "--sim-band", "0.03", "--band-top-k", "7"]) == 0
     assert seen == {"sim_band": 0.03, "band_top_k": 7}
+
+
+def _ask_hit():
+    return SearchHit(
+        rank=1,
+        article_ref="제5조",
+        part="본문",
+        title="반려동물 사육",
+        header="[제5조]",
+        chapter="",
+        page_start=1,
+        page_end=1,
+        score=0.03,
+        vec_rank=1,
+        bm25_rank=None,
+        vec_sim=0.62,
+        chunk_id="d:0001",
+        text="사육 기준",
+    )
+
+
+def test_ask_prints_answer_hits_warning_disclaimer(monkeypatch, capsys, settings):
+    seen = {}
+
+    def fake_answer(question, settings, **kwargs):
+        seen.update(kwargs)
+        return AnswerResult(
+            question="q",
+            search_query="q",
+            rewritten_question=None,
+            answer="가능합니다 (제5조)",
+            disclaimer=DISCLAIMER,
+            hits=[_ask_hit()],
+            cited_refs=["제5조"],
+            unverified_refs=["제99조"],
+            llm="fake",
+        )
+
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert main(["ask", "q"]) == 0
+    out = capsys.readouterr().out
+    assert "가능합니다 (제5조)" in out
+    assert "제5조 반려동물 사육 (p.1) [인용]" in out
+    assert "제99조" in out
+    assert "(LLM: fake)" in out
+    assert out.strip().splitlines()[-1] == DISCLAIMER
+
+
+def test_ask_no_hits(monkeypatch, capsys, settings):
+    def fake_answer(question, settings, **kwargs):
+        return AnswerResult(
+            question="q",
+            search_query="q",
+            rewritten_question=None,
+            answer=NO_HIT_ANSWER,
+            disclaimer=DISCLAIMER,
+            hits=[],
+            cited_refs=[],
+            unverified_refs=[],
+            llm=None,
+        )
+
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert main(["ask", "오늘 점심"]) == 0
+    out = capsys.readouterr().out
+    assert NO_HIT_ANSWER in out
+    assert DISCLAIMER in out
+    assert "LLM:" not in out
+
+
+def test_ask_bad_history_exits_one(monkeypatch, capsys, settings, tmp_path):
+    bad = tmp_path / "history.json"
+    bad.write_text("not json", encoding="utf-8")
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    assert main(["ask", "q", "--history", str(bad)]) == 1
+    assert "대화 이력" in capsys.readouterr().err
+
+
+def test_ask_llm_error_exits_one(monkeypatch, capsys, settings):
+    def fake_answer(question, settings, **kwargs):
+        raise OllamaConnectionError()
+
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert main(["ask", "q"]) == 1
+    assert "ollama serve" in capsys.readouterr().err
+
+
+def test_ask_llm_option_overrides_provider(monkeypatch, settings):
+    seen = {}
+
+    def fake_answer(question, settings, **kwargs):
+        seen["provider"] = settings.llm_provider
+        return AnswerResult(
+            question="q",
+            search_query="q",
+            rewritten_question=None,
+            answer=NO_HIT_ANSWER,
+            disclaimer=DISCLAIMER,
+            hits=[],
+            cited_refs=[],
+            unverified_refs=[],
+            llm=None,
+        )
+
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert main(["ask", "q", "--llm", "claude"]) == 0
+    assert seen["provider"] == "claude"
+
+
+def test_ask_history_passed(monkeypatch, capsys, settings, tmp_path):
+    path = tmp_path / "history.json"
+    path.write_text(
+        '[{"role": "user", "content": "반려동물 키워도 되나요"}, {"role": "assistant", "content": "가능합니다"}]',
+        encoding="utf-8",
+    )
+    seen = {}
+
+    def fake_answer(question, settings, **kwargs):
+        seen["history"] = kwargs["history"]
+        return AnswerResult(
+            question="q",
+            search_query="q",
+            rewritten_question=None,
+            answer=NO_HIT_ANSWER,
+            disclaimer=DISCLAIMER,
+            hits=[],
+            cited_refs=[],
+            unverified_refs=[],
+            llm=None,
+        )
+
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert main(["ask", "q", "--history", str(path)]) == 0
+    assert len(seen["history"]) == 2
+    assert all(isinstance(turn, ChatTurn) for turn in seen["history"])

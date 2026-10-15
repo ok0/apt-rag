@@ -8,12 +8,13 @@ from dataclasses import asdict
 from pathlib import Path
 
 from apt_rag import __version__
+from apt_rag.answer import load_history
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
 from apt_rag.llm import LLMError, OllamaError
 from apt_rag.qgen import split_parts
 from apt_rag.search import Searcher
-from apt_rag.service import build_index, evaluate, generate_questions, inspect_pdf
+from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
 
 
 MIN_SIM_HELP = (
@@ -36,6 +37,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "  apt-rag inspect data/bylaws.pdf\n"
             "  apt-rag index data/bylaws.pdf\n"
             '  apt-rag search "반려동물 키워도 되나요"\n'
+            '  apt-rag ask "반려동물 키워도 되나요"\n'
             "  apt-rag eval eval/sample_questions.csv\n"
             "  apt-rag help search"
         ),
@@ -68,6 +70,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
     p_eval.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
     p_eval.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
+
+    p_ask = sub.add_parser("ask", help="검색된 조항을 근거로 LLM이 답변 (APT_RAG_LLM)")
+    p_ask.add_argument("question")
+    p_ask.add_argument(
+        "--history",
+        default=None,
+        help='이전 대화 JSON 파일. 형식: [{"role": "user"|"assistant", "content": "..."}]. 있으면 질문을 독립 문장으로 재작성한 뒤 검색',
+    )
+    p_ask.add_argument("--llm", choices=["ollama", "claude"], default=None, help="LLM 구현체 (기본 APT_RAG_LLM 또는 ollama)")
+    p_ask.add_argument("--top-n", type=int, default=5)
+    p_ask.add_argument("--json", action="store_true")
+    p_ask.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
+    p_ask.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
+    p_ask.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
 
     p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (로컬 ollama)")
     p_gen.add_argument("--count", type=int, default=40, help="질문을 만들 조항 수 (기본 40)")
@@ -243,6 +259,44 @@ def _cmd_gen_questions(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ask(args: argparse.Namespace) -> int:
+    settings = _with_band_overrides(load_settings(), args)
+    if args.llm:
+        settings = dataclasses.replace(settings, llm_provider=args.llm)
+    try:
+        history = load_history(Path(args.history)) if args.history else []
+        result = answer(args.question, settings, history=history, top_n=args.top_n, min_sim=args.min_sim)
+    except (FileNotFoundError, ValueError, LLMError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+        return 0
+    if result.rewritten_question:
+        print(f"[재작성된 질문] {result.rewritten_question}")
+    if any(h.via_band for h in result.hits):
+        print(BAND_NOTICE)
+    print(result.answer)
+    if result.hits:
+        print()
+        print("근거로 검색된 조항:")
+        for h in result.hits:
+            print(
+                f"- {h.article_ref} {h.title} (p.{h.page_start}{'-' + str(h.page_end) if h.page_end != h.page_start else ''})"
+                + (" [인용]" if h.article_ref in result.cited_refs else "")
+            )
+    if result.unverified_refs:
+        print(
+            f"경고: 답변에 검색 결과에 없는 조항 번호가 있습니다: {', '.join(result.unverified_refs)}. 원문을 확인하세요."
+        )
+    if result.llm and result.hits and not result.cited_refs:
+        print("경고: 답변에 조항 번호 인용이 없습니다.")
+    if result.llm:
+        print(f"(LLM: {result.llm})")
+    print(result.disclaimer)
+    return 0
+
+
 def _cmd_help(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if not args.topic:
         parser.print_help()
@@ -268,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_search(args)
     if args.command == "eval":
         return _cmd_eval(args)
+    if args.command == "ask":
+        return _cmd_ask(args)
     if args.command == "gen-questions":
         return _cmd_gen_questions(args)
     if args.command == "help":
