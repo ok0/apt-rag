@@ -56,3 +56,9 @@ def test_repo_seed_file_is_valid():
     syn = load_synonyms(Path(__file__).parents[1] / "synonyms.txt")
     assert 20 <= len(syn) <= 30
     assert any({"베란다", "발코니"} <= set(g) for g in syn.groups)
+
+
+def test_repo_seed_maps_pet_words_to_gachuk():
+    syn = load_synonyms(Path(__file__).parents[1] / "synonyms.txt")
+    for q in ("반려동물 키워도 되나요", "강아지 키워도 되나요"):
+        assert "가축" in syn.expand_tokens(tokenize(q))
