@@ -269,8 +269,12 @@ def _cmd_ask(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
         return 0
+    print(f"[질문 원본] {result.question}")
     if result.rewritten_question:
-        print(f"[재작성된 질문] {result.rewritten_question}")
+        print(f"[LLM 보정 질문] {result.rewritten_question}")
+    else:
+        print("[LLM 보정 질문] (이전 대화가 없어 보정하지 않음)")
+    print()
     if any(h.via_band for h in result.hits):
         print(BAND_NOTICE)
     print(result.answer)

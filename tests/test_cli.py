@@ -244,3 +244,26 @@ def test_ask_history_passed(monkeypatch, capsys, settings, tmp_path):
     assert main(["ask", "q", "--history", str(path)]) == 0
     assert len(seen["history"]) == 2
     assert all(isinstance(turn, ChatTurn) for turn in seen["history"])
+
+
+def test_ask_prints_original_and_rewritten_question(monkeypatch, capsys, settings, tmp_path):
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+
+    def fake_answer(question, settings, **kwargs):
+        return AnswerResult(
+            question=question,
+            search_query="반려동물은 몇 마리까지 키울 수 있나요?",
+            rewritten_question="반려동물은 몇 마리까지 키울 수 있나요?",
+            answer="답",
+            disclaimer=DISCLAIMER,
+            hits=[],
+            cited_refs=[],
+            unverified_refs=[],
+            llm="fake",
+        )
+
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert cli.main(["ask", "그럼 몇 마리까지 돼요?"]) == 0
+    out = capsys.readouterr().out
+    assert "[질문 원본] 그럼 몇 마리까지 돼요?" in out
+    assert "[LLM 보정 질문] 반려동물은 몇 마리까지 키울 수 있나요?" in out
