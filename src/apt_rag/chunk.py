@@ -104,7 +104,7 @@ def _sub(s: str | None) -> int | None:
 def _appendix_title(rest: str, next_t: str) -> str:
     title = clean_title(rest)
     if not title or title.startswith("("):
-        head = "" if is_structural(next_t) else clean_title(next_t)
+        head = "" if is_structural(next_t) or next_t.startswith("|") else clean_title(next_t)
         if rest.startswith("("):
             return (head + " " + clean_title(rest)).strip()
         return head
@@ -158,7 +158,8 @@ class _Builder:
     def run(self, lines: list[Line]) -> tuple[list[Unit], list[Line]]:
         for i, line in enumerate(lines):
             t = line.text.strip()
-            next_t = lines[i + 1].text.strip() if i + 1 < len(lines) else ""
+            nxt = lines[i + 1] if i + 1 < len(lines) else None
+            next_t = nxt.text.strip() if nxt is not None and nxt.kind != "table" else ""
             if line.kind == "table":
                 self.add(line)
                 continue

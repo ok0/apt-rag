@@ -168,3 +168,33 @@ def test_bracket_sentence_is_not_appendix_heading():
     ]
     units, _, _, _ = run(lines)
     assert all(u.part != "별표" for u in units)
+
+
+def test_appendix_title_ignores_table_line_after_heading():
+    table = Line(text="| 00. 00. | 000,000 |\n|---|---|", page=1, page_end=1, kind="table")
+    lines = [
+        L("제1조(목적)"),
+        L("본문."),
+        L("[별지 제6호서식]"),
+        table,
+    ]
+    _, chunks, _, _ = run(lines)
+    form = next(c for c in chunks if c.appendix_label == "별지 제6호서식")
+    assert form.part == "별지"
+    assert form.title == ""
+    assert form.header == "[별지 제6호서식]"
+
+
+def test_appendix_title_from_parenthesis_after_table_line():
+    table = Line(text="| 구 비 서 류 | 1. 신청서 |", page=1, page_end=1, kind="table")
+    lines = [
+        L("제1조(목적)"),
+        L("본문."),
+        L("[별지 제6호서식] (제61조제1항 관련)"),
+        table,
+    ]
+    _, chunks, _, _ = run(lines)
+    form = next(c for c in chunks if c.appendix_label == "별지 제6호서식")
+    assert form.title == "(제61조제1항 관련)"
+    assert form.header == "[별지 제6호서식 (제61조제1항 관련)]"
+    assert "|" not in form.title
