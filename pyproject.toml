@@ -1,0 +1,32 @@
+[project]
+name = "apt-rag"
+version = "0.1.0"
+description = "아파트 관리규약 PDF 하이브리드 검색 색인"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pymupdf>=1.24",
+  "sentence-transformers>=3.0",
+  "torch>=2.3",
+  "chromadb>=1.0,<2",
+  "rank-bm25>=0.2.2",
+  "kiwipiepy>=0.18",
+  "python-dotenv>=1.0",
+]
+
+[project.scripts]
+apt-rag = "apt_rag.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/apt_rag"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: 실제 BGE-M3 모델을 다운로드/로드하는 테스트"]
+addopts = "-m 'not slow'"

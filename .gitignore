@@ -1,0 +1,23 @@
+.request
+.ensemble
+.DS_Store
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+# secrets
+.env
+.env.*
+!.env.example
+# data: 원본 PDF, 중간 산출물, 색인
+data/
+*.pdf
+# 모델 캐시
+.cache/
+.hf_cache/
+models/
