@@ -26,7 +26,7 @@ def test_evaluate_hit_and_failure(settings, hash_embedder, tmp_path):
         "주차장 이용 시간은?,제1조\n",
         encoding="utf-8",
     )
-    result = evaluate_csv(csv_path, Searcher(settings, hash_embedder), k=1)
+    result = evaluate_csv(csv_path, Searcher(settings, hash_embedder), k=1, min_sim=0)
     assert result.total == 2
     assert result.hit_rate == 0.5
     assert len(result.failures) == 1

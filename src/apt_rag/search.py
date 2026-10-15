@@ -48,6 +48,8 @@ class Searcher:
         ids = list(res["ids"][0])
         sims = {cid: 1.0 - float(dist) for cid, dist in zip(ids, res["distances"][0])}
         vec_ids = [cid for cid in ids if cutoff <= 0 or sims[cid] >= cutoff]
+        if cutoff > 0 and not vec_ids:
+            return []
         bm_ids = [cid for cid, _ in bm25.search(query, CANDIDATES)]
         scores = rrf([vec_ids, bm_ids])
         vec_rank = {cid: i for i, cid in enumerate(vec_ids, start=1)}
