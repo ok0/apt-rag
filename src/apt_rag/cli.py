@@ -8,7 +8,8 @@ from pathlib import Path
 
 from apt_rag import __version__
 from apt_rag.config import load_settings
-from apt_rag.service import inspect_pdf
+from apt_rag.ocr import OcrUnavailableError
+from apt_rag.service import build_index, inspect_pdf
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -61,10 +62,54 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_index(args: argparse.Namespace) -> int:
+    pdf = Path(args.pdf)
+    if not pdf.exists():
+        print(f"파일을 찾을 수 없습니다: {pdf}", file=sys.stderr)
+        return 1
+    settings = load_settings()
+    try:
+        result = build_index(pdf, settings, no_embed=args.no_embed, strict=args.strict)
+    except OcrUnavailableError as exc:
+        print(str(exc), file=sys.stderr)
+        return 4
+    except NotImplementedError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    report = result.report
+    print("[1/5] 판별 완료")
+    print("[2/5] 추출 완료")
+    print(f"[3/5] 청킹/검증: 청크 {result.chunk_count}개, 제외 {sum(report.summary.get('excluded_by_reason', {}).values())}개")
+    print("      요약: " + json.dumps(report.summary, ensure_ascii=False))
+    shown = {"ERROR": 0, "WARN": 0}
+    for issue in report.issues:
+        if issue.severity not in shown:
+            continue
+        if shown[issue.severity] >= 10:
+            continue
+        shown[issue.severity] += 1
+        print(f"      [{issue.severity}] {issue.code}: {issue.message}")
+    for severity in ("ERROR", "WARN"):
+        total = sum(1 for i in report.issues if i.severity == severity)
+        if total > 10:
+            print(f"      [{severity}] 외 {total - 10}건")
+    if args.no_embed:
+        print("[4/5] 임베딩: 생략 (--no-embed)")
+    else:
+        print("[4/5] 임베딩")
+    print(f"[5/5] 산출물: {result.work_dir}")
+    if result.aborted_reason:
+        print(f"중단: {result.aborted_reason}", file=sys.stderr)
+        return 3
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.command == "inspect":
         return _cmd_inspect(args)
+    if args.command == "index":
+        return _cmd_index(args)
     print("미구현")
     return 2

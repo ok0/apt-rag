@@ -34,8 +34,14 @@ uv run apt-rag eval <csv> [-k 5] [--json]
 
 산출물은 `APT_RAG_DATA_DIR`(기본값 `data`) 아래에 저장됩니다.
 
-- `data/work/<doc_id>/`: `inspect.json`, `extracted.md`, `pages.json`, `chunks.json` 등 중간 산출물
-- `data/index/`: Chroma 색인(`data/index/chroma`) 및 BM25 색인
+- `data/work/<doc_id>/`
+  - `inspect.json`: 쪽별 판별 결과
+  - `pages.json`: 쪽 정보, 제거된 줄, 통계
+  - `extracted.md`: 추출된 본문(쪽 마커 포함)
+  - `chunks.json`: 청크, 제외 구간, 구조 줄
+  - `validation_report.json`, `validation_report.md`: 검증 리포트
+- `data/index/`: 색인 (`chroma/`, `chunks.json`, `bm25_tokens.json`, `manifest.json`)
+- `data/work/eval/eval-YYYYmmdd-HHMMSS.json`: 평가 결과
 
 설정은 `.env.example`을 참고하세요.
 
