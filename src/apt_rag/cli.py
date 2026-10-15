@@ -14,7 +14,18 @@ from apt_rag.service import build_index, evaluate, inspect_pdf
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="apt-rag")
+    parser = argparse.ArgumentParser(
+        prog="apt-rag",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "예시:\n"
+            "  apt-rag inspect data/bylaws.pdf\n"
+            "  apt-rag index data/bylaws.pdf\n"
+            '  apt-rag search "반려동물 키워도 되나요"\n'
+            "  apt-rag eval eval/sample_questions.csv\n"
+            "  apt-rag help search"
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -37,6 +48,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("csv")
     p_eval.add_argument("-k", type=int, default=5)
     p_eval.add_argument("--json", action="store_true")
+
+    p_help = sub.add_parser("help", help="도움말 표시 (help <명령>으로 명령별 도움말)")
+    p_help.add_argument("topic", nargs="?", help="도움말을 볼 명령 이름")
 
     return parser
 
@@ -151,6 +165,20 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_help(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    if not args.topic:
+        parser.print_help()
+        return 0
+    choices = next(
+        a.choices for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    )
+    if args.topic not in choices:
+        print(f"알 수 없는 명령: {args.topic} (가능: {', '.join(choices)})", file=sys.stderr)
+        return 1
+    choices[args.topic].print_help()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -162,5 +190,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_search(args)
     if args.command == "eval":
         return _cmd_eval(args)
+    if args.command == "help":
+        return _cmd_help(parser, args)
     print("미구현")
     return 2
