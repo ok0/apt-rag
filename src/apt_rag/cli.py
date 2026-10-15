@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
+from dataclasses import asdict
+from pathlib import Path
 
 from apt_rag import __version__
+from apt_rag.config import load_settings
+from apt_rag.service import inspect_pdf
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -33,8 +39,32 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _cmd_inspect(args: argparse.Namespace) -> int:
+    pdf = Path(args.pdf)
+    if not pdf.exists():
+        print(f"파일을 찾을 수 없습니다: {pdf}", file=sys.stderr)
+        return 1
+    settings = load_settings()
+    report = inspect_pdf(pdf, settings)
+    if args.json:
+        print(json.dumps(asdict(report), ensure_ascii=False, indent=2))
+        return 0
+    print("쪽  판별   글자수  이미지비율  표  비고")
+    for page in report.pages:
+        print(
+            f"{page.page:<4} {page.kind:<6} {page.text_chars:>6}  "
+            f"{page.image_coverage:>8.2f}  {page.table_count:>2}  {page.note}"
+        )
+    counts = " / ".join(f"{kind}={count}" for kind, count in report.counts.items())
+    print(f"판별 개수: {counts}")
+    print(report.recommendation)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.command == "inspect":
+        return _cmd_inspect(args)
     print("미구현")
     return 2
