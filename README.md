@@ -4,7 +4,7 @@
 
 ## 1. 사전 설치
 
-- uv만 필요합니다. tesseract는 불필요합니다. ollama는 `gen-questions`와 `ask`(기본 LLM)에 필요합니다(5절 참고). Claude API를 쓰려면 `.env`에 `ANTHROPIC_API_KEY`가 필요합니다(커밋 금지).
+- uv만 필요합니다. tesseract는 불필요합니다. ollama는 `gen-questions`와 `ask`(기본 LLM)에 필요합니다(5절 참고).
 - Python 3.12는 uv가 자동으로 설치합니다.
 - 임베딩 모델 BGE-M3(약 2.3GB)는 첫 실행 시 다운로드됩니다.
 - 네트워크가 필요한 시점은 두 가지뿐입니다.
@@ -23,7 +23,7 @@ uv run apt-rag inspect <pdf> [--json]
 uv run apt-rag index <pdf> [--no-embed] [--strict]
 uv run apt-rag search <query> [--top-n 5] [--excerpt 160] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
 uv run apt-rag eval <csv> [-k 5] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
-uv run apt-rag ask <question> [--history FILE] [--llm ollama|claude] [--top-n 5] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
+uv run apt-rag ask <question> [--history FILE] [--top-n 5] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
 uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generated_questions.csv] [--model M] [--seed 42] [--parts 본문] [--min-chars 80] [--force]
 ```
 
@@ -72,10 +72,8 @@ uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generate
   - `답변에 검색 결과에 없는 조항 번호가 있습니다`: 답변이 검색 결과에 없는 조항 번호를 적었습니다. 원문을 확인하세요.
   - `답변에 조항 번호 인용이 없습니다`: 검색 결과는 있는데 답변에 인용이 하나도 없습니다.
 - LLM 선택:
-  - `APT_RAG_LLM`: `ollama`(기본) 또는 `claude`. `--llm`이 이 값을 덮어씁니다.
+  - `APT_RAG_LLM`: `ollama`만 지원합니다(기본값).
   - `APT_RAG_LLM_MODEL`: ollama 모델(기본 `qwen2.5:7b`). ollama 호출은 컨텍스트 16384 토큰(`num_ctx`)으로 합니다.
-  - `APT_RAG_CLAUDE_MODEL`: Claude 모델 ID(기본 `claude-haiku-5-5`). `APT_RAG_LLM=claude`일 때만 씁니다.
-  - `ANTHROPIC_API_KEY`: Claude API 키. `.env`에만 두고 커밋하지 마세요. 없으면 Claude 호출 전에 종료합니다.
 - 이력 JSON 형식(`--history`):
 
   ```json

@@ -78,7 +78,6 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help='이전 대화 JSON 파일. 형식: [{"role": "user"|"assistant", "content": "..."}]. 있으면 질문을 독립 문장으로 재작성한 뒤 검색',
     )
-    p_ask.add_argument("--llm", choices=["ollama", "claude"], default=None, help="LLM 구현체 (기본 APT_RAG_LLM 또는 ollama)")
     p_ask.add_argument("--top-n", type=int, default=5)
     p_ask.add_argument("--json", action="store_true")
     p_ask.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
@@ -261,8 +260,6 @@ def _cmd_gen_questions(args: argparse.Namespace) -> int:
 
 def _cmd_ask(args: argparse.Namespace) -> int:
     settings = _with_band_overrides(load_settings(), args)
-    if args.llm:
-        settings = dataclasses.replace(settings, llm_provider=args.llm)
     try:
         history = load_history(Path(args.history)) if args.history else []
         result = answer(args.question, settings, history=history, top_n=args.top_n, min_sim=args.min_sim)

@@ -217,29 +217,6 @@ def test_ask_llm_error_exits_one(monkeypatch, capsys, settings):
     assert "ollama serve" in capsys.readouterr().err
 
 
-def test_ask_llm_option_overrides_provider(monkeypatch, settings):
-    seen = {}
-
-    def fake_answer(question, settings, **kwargs):
-        seen["provider"] = settings.llm_provider
-        return AnswerResult(
-            question="q",
-            search_query="q",
-            rewritten_question=None,
-            answer=NO_HIT_ANSWER,
-            disclaimer=DISCLAIMER,
-            hits=[],
-            cited_refs=[],
-            unverified_refs=[],
-            llm=None,
-        )
-
-    monkeypatch.setattr(cli, "load_settings", lambda: settings)
-    monkeypatch.setattr(cli, "answer", fake_answer)
-    assert main(["ask", "q", "--llm", "claude"]) == 0
-    assert seen["provider"] == "claude"
-
-
 def test_ask_history_passed(monkeypatch, capsys, settings, tmp_path):
     path = tmp_path / "history.json"
     path.write_text(

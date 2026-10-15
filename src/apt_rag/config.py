@@ -24,7 +24,6 @@ class Settings:
     sim_band: float = 0.05
     band_top_k: int = 20
     llm_provider: str = "ollama"
-    claude_model: str = "claude-haiku-5-5"
 
     @property
     def work_dir(self) -> Path:
@@ -59,7 +58,6 @@ def load_settings(env_file: Path | None = None) -> Settings:
         sim_band=float(os.environ.get("APT_RAG_SIM_BAND", "0.05")),
         band_top_k=int(os.environ.get("APT_RAG_BAND_TOP_K", "20")),
         llm_provider=os.environ.get("APT_RAG_LLM", "ollama"),
-        claude_model=os.environ.get("APT_RAG_CLAUDE_MODEL", "claude-haiku-5-5"),
     )
 
 

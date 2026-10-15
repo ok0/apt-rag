@@ -1,10 +1,8 @@
 import dataclasses
-from types import SimpleNamespace
 
 import pytest
 
 from apt_rag.llm import (
-    ClaudeClient,
     LLMError,
     OllamaClient,
     OllamaConnectionError,
@@ -19,23 +17,9 @@ def test_get_llm_ollama(settings):
     assert client.name == "ollama:qwen2.5:7b"
 
 
-def test_get_llm_claude(settings, monkeypatch):
-    pytest.importorskip("anthropic")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    client = get_llm(dataclasses.replace(settings, llm_provider="claude"))
-    assert isinstance(client, ClaudeClient)
-    assert client.model == "claude-haiku-5-5"
-
-
-def test_get_llm_claude_without_key(settings, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(LLMError, match="ANTHROPIC_API_KEY"):
-        get_llm(dataclasses.replace(settings, llm_provider="claude"))
-
-
 def test_get_llm_unknown(settings):
-    with pytest.raises(LLMError):
-        get_llm(dataclasses.replace(settings, llm_provider="gpt"))
+    with pytest.raises(LLMError, match="지원하지 않는 APT_RAG_LLM"):
+        get_llm(dataclasses.replace(settings, llm_provider="claude"))
 
 
 def test_ollama_complete_body(monkeypatch):
@@ -62,33 +46,3 @@ def test_ollama_complete_connection_error():
         client.complete("s", [{"role": "user", "content": "q"}])
     assert isinstance(info.value, LLMError)
     assert "ollama serve" in str(info.value)
-
-
-def test_claude_complete_with_fake_client():
-    pytest.importorskip("anthropic")
-    recorded = {}
-
-    class FakeMessages:
-        def create(self, **kw):
-            recorded.update(kw)
-            return SimpleNamespace(content=[SimpleNamespace(type="text", text="답")])
-
-    fake = SimpleNamespace(messages=FakeMessages())
-    client = ClaudeClient("claude-haiku-5-5", client=fake)
-    assert client.complete("S", [{"role": "user", "content": "q"}]) == "답"
-    assert recorded["system"] == "S"
-    assert recorded["model"] == "claude-haiku-5-5"
-
-
-def test_claude_connection_error_mapped():
-    anthropic = pytest.importorskip("anthropic")
-    httpx = pytest.importorskip("httpx")
-
-    class FakeMessages:
-        def create(self, **kw):
-            raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.anthropic.com"))
-
-    fake = SimpleNamespace(messages=FakeMessages())
-    client = ClaudeClient("claude-haiku-5-5", client=fake)
-    with pytest.raises(LLMError, match="연결"):
-        client.complete("S", [{"role": "user", "content": "q"}])

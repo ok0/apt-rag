@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from typing import Protocol
@@ -124,62 +123,8 @@ class OllamaClient:
         return self._post_chat(body)
 
 
-class ClaudeClient:
-    def __init__(
-        self,
-        model: str,
-        api_key: str | None = None,
-        timeout: float = 60.0,
-        client: object | None = None,
-    ) -> None:
-        self.model = model
-        self.name = f"claude:{model}"
-        if client is not None:
-            self._client = client
-            return
-        if not api_key:
-            raise LLMError("ANTHROPIC_API_KEY가 없습니다. .env에 설정하세요 (커밋 금지)")
-        try:
-            import anthropic
-        except ImportError as exc:
-            raise LLMError("anthropic 패키지가 없습니다. `uv sync` 실행") from exc
-        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=2)
-
-    def complete(
-        self,
-        system: str,
-        messages: list[dict[str, str]],
-        *,
-        temperature: float = 0.0,
-        max_tokens: int = 1024,
-    ) -> str:
-        import anthropic
-
-        try:
-            resp = self._client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=messages,
-                temperature=temperature,
-            )
-        except anthropic.AuthenticationError as exc:
-            raise LLMError("Claude API 인증 실패. .env의 ANTHROPIC_API_KEY 확인") from exc
-        except anthropic.NotFoundError as exc:
-            raise LLMError(
-                f"Claude 모델 '{self.model}'을(를) 찾을 수 없습니다. APT_RAG_CLAUDE_MODEL 확인"
-            ) from exc
-        except anthropic.APIStatusError as exc:
-            raise LLMError(f"Claude API 요청 실패 (HTTP {exc.status_code})") from exc
-        except anthropic.APIConnectionError as exc:
-            raise LLMError("Claude API에 연결할 수 없습니다. 네트워크 확인") from exc
-        return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-
-
 def get_llm(settings: Settings) -> LLM:
     provider = settings.llm_provider.strip().lower()
     if provider == "ollama":
         return OllamaClient(settings.ollama_url, settings.llm_model)
-    if provider == "claude":
-        return ClaudeClient(settings.claude_model, api_key=os.environ.get("ANTHROPIC_API_KEY"))
-    raise LLMError(f"알 수 없는 APT_RAG_LLM: {settings.llm_provider} (ollama 또는 claude)")
+    raise LLMError(f"지원하지 않는 APT_RAG_LLM: {settings.llm_provider} (현재 ollama만 지원)")
