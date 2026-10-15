@@ -4,7 +4,7 @@
 
 ## 1. 사전 설치
 
-- uv만 필요합니다. ollama, tesseract는 불필요합니다.
+- uv만 필요합니다. tesseract는 불필요합니다. ollama는 평가 질문 생성(`gen-questions`)에만 필요합니다(5절 참고).
 - Python 3.12는 uv가 자동으로 설치합니다.
 - 임베딩 모델 BGE-M3(약 2.3GB)는 첫 실행 시 다운로드됩니다.
 - 네트워크가 필요한 시점은 두 가지뿐입니다.
@@ -23,6 +23,7 @@ uv run apt-rag inspect <pdf> [--json]
 uv run apt-rag index <pdf> [--no-embed] [--strict]
 uv run apt-rag search <query> [--top-n 5] [--excerpt 160] [--json]
 uv run apt-rag eval <csv> [-k 5] [--json]
+uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generated_questions.csv] [--model M] [--seed 42] [--parts 본문] [--min-chars 80] [--force]
 ```
 
 - `inspect`: 쪽별 텍스트/이미지 판별 결과와 OCR 필요 쪽을 보여줍니다.
@@ -54,3 +55,34 @@ uv run pytest -m slow
 
 - `uv run pytest`: 빠른 테스트만 실행합니다(실제 모델 미사용).
 - `uv run pytest -m slow`: 실제 BGE-M3 모델을 다운로드/로드하는 테스트를 실행합니다.
+
+## 5. 평가 질문 생성
+
+색인된 조항을 로컬 LLM(ollama)에 보여주고, 입주민이 물어볼 법한 질문과 정답 조항이 채워진 CSV 초안을 만듭니다. 직접 질문을 쓰는 부담을 줄이기 위한 기능입니다.
+
+1. ollama 설치 및 서버 실행
+
+   ```bash
+   brew install ollama
+   brew services start ollama   # 또는 별도 터미널에서 `ollama serve`
+   ```
+
+2. 모델 받기 (`qwen2.5:7b`, 약 4.7GB)
+
+   ```bash
+   ollama pull qwen2.5:7b
+   ```
+
+3. 질문 생성
+
+   ```bash
+   uv run apt-rag gen-questions --count 40
+   uv run apt-rag gen-questions --count 30 --parts 본문,별표 --out eval/generated_questions.csv
+   ```
+
+- 색인(`apt-rag index`)이 먼저 있어야 합니다. 없으면 종료됩니다.
+- 출력은 `question,expected_article,source_title,source_pages` 열을 가진 CSV이며, `apt-rag eval`에 그대로 넘길 수 있습니다.
+- `expected_article`은 생성기가 질문을 만든 조항 번호입니다(예: `제69조`, `별표 8`).
+- 서버 주소와 모델은 `APT_RAG_OLLAMA_URL`, `APT_RAG_LLM_MODEL` 환경변수(또는 `.env`)로 바꿀 수 있고, `--model`이 우선합니다.
+- 생성 결과는 초안입니다. 정답 조항이 자동으로 붙어 있어도 사람이 질문과 정답을 반드시 검토한 뒤 평가에 사용하세요.
+- 검색 결과를 보고 정답을 정하면 검색이 잘 되는 쪽으로 평가가 후하게 나옵니다. 생성기의 정답은 조 본문에서 만든 질문이므로 이런 편향이 적습니다.
