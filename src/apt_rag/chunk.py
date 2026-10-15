@@ -21,6 +21,7 @@ from apt_rag.extract import (
 from apt_rag.models import Chunk, ExcludedSegment, Line
 
 MAX_CHARS = 1500
+ITEM_RE = re.compile(r"^(\d{1,2})\.(?!\d)")
 
 _TAG_RE = re.compile(r"[<〈][^>〉]*[>〉]")
 _TAG_OR_SPACE_RE = re.compile(r"[<〈\[][^>〉\]]*[>〉\]]|\s")
@@ -284,7 +285,13 @@ def build_units(lines: list[Line]) -> tuple[list[Unit], list[Line]]:
     return _Builder().run(lines)
 
 
-def make_header(unit: Unit, paragraph_no: int | None, split_index: int | None, split_total: int | None) -> str:
+def make_header(
+    unit: Unit,
+    paragraph_no: int | None,
+    split_index: int | None,
+    split_total: int | None,
+    item_no: int | None = None,
+) -> str:
     lab_title = ""
     if unit.article_num is not None:
         label = article_label(unit.article_num, unit.article_sub)
@@ -298,6 +305,8 @@ def make_header(unit: Unit, paragraph_no: int | None, split_index: int | None, s
     parts = [p for p in parts if p]
     if paragraph_no is not None:
         parts.append(f"제{paragraph_no}항")
+    if item_no is not None:
+        parts.append(f"제{item_no}호")
     s = " > ".join(parts)
     if split_total:
         s += f" ({split_index}/{split_total})"
@@ -343,6 +352,25 @@ def _split_paragraphs(lines: list[Line]) -> list[tuple[int | None, list[Line]]]:
     return [(no, seg_lines) for no, seg_lines in segs]
 
 
+def _split_items(lines: list[Line]) -> list[tuple[int | None, list[Line]]]:
+    segs: list[list] = [[None, []]]
+    last = 0
+    for line in lines:
+        m = ITEM_RE.match(line.text.strip())
+        if m and segs[-1][1]:
+            n = int(m.group(1))
+            if n == last + 1 or (last == 0 and n == 2):
+                segs.append([n, []])
+                last = n
+        segs[-1][1].append(line)
+    if len(segs) >= 2:
+        if segs[1][0] == 1:
+            segs = [[1, segs[0][1] + segs[1][1]]] + segs[2:]
+        else:
+            segs[0][0] = 1
+    return [(no, seg_lines) for no, seg_lines in segs]
+
+
 def chunk_units(units: list[Unit], doc_id: str) -> tuple[list[Chunk], list[ExcludedSegment]]:
     chunks: list[Chunk] = []
     excluded: list[ExcludedSegment] = []
@@ -362,18 +390,25 @@ def chunk_units(units: list[Unit], doc_id: str) -> tuple[list[Chunk], list[Exclu
             )
             continue
         if len(_seg_text(unit.lines)) <= MAX_CHARS:
-            groups: list[tuple[int | None, list[Line]]] = [(None, unit.lines)]
+            groups: list[tuple[int | None, int | None, list[Line]]] = [(None, None, unit.lines)]
         elif unit.article_num is not None and len(_split_paragraphs(unit.lines)) >= 2:
             groups = []
             for no, seg_lines in _split_paragraphs(unit.lines):
                 if len(_seg_text(seg_lines)) > MAX_CHARS:
-                    groups.extend((no, piece) for piece in _pack(seg_lines))
+                    groups.extend((no, None, piece) for piece in _pack(seg_lines))
                 else:
-                    groups.append((no, seg_lines))
+                    groups.append((no, None, seg_lines))
+        elif unit.article_num is not None and len(_split_items(unit.lines)) >= 2:
+            groups = []
+            for item_no, seg_lines in _split_items(unit.lines):
+                if len(_seg_text(seg_lines)) > MAX_CHARS:
+                    groups.extend((None, item_no, piece) for piece in _pack(seg_lines))
+                else:
+                    groups.append((None, item_no, seg_lines))
         else:
-            groups = [(None, piece) for piece in _pack(unit.lines)]
+            groups = [(None, None, piece) for piece in _pack(unit.lines)]
         total = len(groups)
-        for idx, (no, glines) in enumerate(groups):
+        for idx, (no, item_no, glines) in enumerate(groups):
             split_index = idx + 1 if total > 1 else None
             split_total = total if total > 1 else None
             text = _seg_text(glines)
@@ -399,7 +434,7 @@ def chunk_units(units: list[Unit], doc_id: str) -> tuple[list[Chunk], list[Exclu
                     title=doc_part_title,
                     page_start=min(x.page for x in glines),
                     page_end=max(x.page_end for x in glines),
-                    header=make_header(unit, no, split_index, split_total),
+                    header=make_header(unit, no, split_index, split_total, item_no=item_no),
                     text=text,
                     embed_text="",
                     char_len=len(text),

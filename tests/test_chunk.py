@@ -87,16 +87,54 @@ def test_long_article_without_paragraphs_split_evenly():
         L("제1조(목적)"),
         L("본문."),
         L("제6조(시설) 관리 기준"),
-        L("1. " + "가" * 500),
-        L("2. " + "나" * 500),
-        L("3. " + "다" * 500),
-        L("4. " + "라" * 500),
+        L("가" * 500),
+        L("나" * 500),
+        L("다" * 500),
+        L("라" * 500),
     ]
     _, chunks, _, _ = run(lines)
     art = [c for c in chunks if c.article_ref == "제6조"]
     assert len(art) == 2
     assert art[0].split_total == 2
     assert art[0].header.endswith("(1/2)]")
+
+
+def test_long_article_without_paragraphs_split_by_item():
+    lines = [
+        L("제1조(목적)"),
+        L("본문."),
+        L("제83조(동의기준) 동의기준은 다음 각 호와 같다. 1. " + "가" * 600),
+        L("2. " + "나" * 600),
+        L("1) 세부 사항"),
+        L("2.5톤 이상 화물차 " + "라" * 50),
+        L("3. 가축의 사육 " + "다" * 400),
+    ]
+    _, chunks, _, _ = run(lines)
+    art = [c for c in chunks if c.article_ref == "제83조"]
+    assert len(art) == 3
+    assert art[0].text.startswith("제83조(동의기준)")
+    assert art[0].header == "[제83조(동의기준) > 제1호 (1/3)]"
+    assert art[1].text.startswith("2. ")
+    assert "1) 세부 사항" in art[1].text and "2.5톤" in art[1].text
+    assert art[2].text.startswith("3. 가축의 사육")
+    assert art[2].header == "[제83조(동의기준) > 제3호 (3/3)]"
+    assert all(c.paragraph_no is None for c in art)
+
+
+def test_item_split_merges_article_head_into_first_item():
+    lines = [
+        L("제1조(목적)"),
+        L("본문."),
+        L("제3조(정의) 용어의 정의는 다음과 같다."),
+        L("1. " + "가" * 800),
+        L("2. " + "나" * 800),
+    ]
+    _, chunks, _, _ = run(lines)
+    art = [c for c in chunks if c.article_ref == "제3조"]
+    assert len(art) == 2
+    assert art[0].text.startswith("제3조(정의)") and "1. 가" in art[0].text
+    assert art[0].header == "[제3조(정의) > 제1호 (1/2)]"
+    assert art[1].header == "[제3조(정의) > 제2호 (2/2)]"
 
 
 def test_addenda_scopes_and_refs():

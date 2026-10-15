@@ -58,6 +58,9 @@ def test_example_known_content(prepared):
     assert any("제20조제9항" in c.text for c in art100)
     assert len([c for c in prepared.chunks if c.article_ref == "제3조"]) >= 2
     assert len([c for c in prepared.chunks if c.article_ref == "제83조"]) >= 2
+    art83 = [c for c in prepared.chunks if c.article_ref == "제83조"]
+    item3 = [c for c in art83 if "> 제3호" in c.header]
+    assert len(item3) == 1 and item3[0].text.startswith("3. 가축")
 
 
 def test_example_length_and_coverage(prepared):
