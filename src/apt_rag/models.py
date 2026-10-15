@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 def count_content_chars(s: str) -> int:
@@ -143,3 +144,19 @@ class EvalResult:
     hits: int
     hit_rate: float
     failures: list[EvalFailure]
+
+
+@dataclass
+class GeneratedQuestion:
+    question: str
+    expected_article: str
+    source_title: str
+    source_pages: str
+
+
+@dataclass
+class GenResult:
+    out_path: Path
+    selected: int
+    questions: list[GeneratedQuestion]
+    skipped: list[str]

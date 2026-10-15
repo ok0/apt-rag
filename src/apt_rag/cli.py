@@ -9,8 +9,9 @@ from pathlib import Path
 from apt_rag import __version__
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
+from apt_rag.qgen import OllamaError, split_parts
 from apt_rag.search import Searcher
-from apt_rag.service import build_index, evaluate, inspect_pdf
+from apt_rag.service import build_index, evaluate, generate_questions, inspect_pdf
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -48,6 +49,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("csv")
     p_eval.add_argument("-k", type=int, default=5)
     p_eval.add_argument("--json", action="store_true")
+
+    p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (로컬 ollama)")
+    p_gen.add_argument("--count", type=int, default=40, help="질문을 만들 조항 수 (기본 40)")
+    p_gen.add_argument("--per-article", type=int, default=1, help="조항당 질문 수 (기본 1)")
+    p_gen.add_argument(
+        "--out", default="eval/generated_questions.csv", help="출력 CSV 경로 (기본 eval/generated_questions.csv)"
+    )
+    p_gen.add_argument("--model", default=None, help="ollama 모델 이름 (기본 APT_RAG_LLM_MODEL 또는 qwen2.5:7b)")
+    p_gen.add_argument("--seed", type=int, default=42, help="조항 샘플링과 생성 시드 (기본 42)")
+    p_gen.add_argument("--parts", default="본문", help="대상 부분, 쉼표로 여러 개 (예: 본문,별표; 기본 본문)")
+    p_gen.add_argument("--min-chars", type=int, default=80, help="청크 최소 글자 수 (기본 80)")
+    p_gen.add_argument("--force", action="store_true", help="기존 출력 파일을 덮어쓰기")
 
     p_help = sub.add_parser("help", help="도움말 표시 (help <명령>으로 명령별 도움말)")
     p_help.add_argument("topic", nargs="?", help="도움말을 볼 명령 이름")
@@ -165,6 +178,37 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gen_questions(args: argparse.Namespace) -> int:
+    settings = load_settings()
+
+    def progress(index: int, total: int, chunk, produced: int | None) -> None:
+        label = f"{chunk.article_ref} {chunk.title}"
+        if produced is None:
+            print(f"[{index}/{total}] {label} -> 건너뜀 (유효한 질문 없음)")
+        else:
+            print(f"[{index}/{total}] {label} -> {produced}개 질문")
+
+    try:
+        result = generate_questions(
+            settings,
+            out=Path(args.out),
+            count=args.count,
+            per_article=args.per_article,
+            parts=split_parts(args.parts),
+            min_chars=args.min_chars,
+            seed=args.seed,
+            model=args.model,
+            force=args.force,
+            on_progress=progress,
+        )
+    except (FileNotFoundError, FileExistsError, OllamaError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"생성 {len(result.questions)}개, 건너뜀 {len(result.skipped)}개, 저장: {result.out_path}")
+    print("정답 조항은 자동 부여된 초안이므로 사람이 검토하세요.")
+    return 0
+
+
 def _cmd_help(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     if not args.topic:
         parser.print_help()
@@ -190,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_search(args)
     if args.command == "eval":
         return _cmd_eval(args)
+    if args.command == "gen-questions":
+        return _cmd_gen_questions(args)
     if args.command == "help":
         return _cmd_help(parser, args)
     print("미구현")

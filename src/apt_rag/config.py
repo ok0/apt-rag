@@ -17,6 +17,8 @@ class Settings:
     batch_size: int
     max_seq_length: int
     ocr: str
+    ollama_url: str = "http://localhost:11434"
+    llm_model: str = "qwen2.5:7b"
 
     @property
     def work_dir(self) -> Path:
@@ -44,6 +46,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         batch_size=int(os.environ.get("APT_RAG_BATCH_SIZE", "8")),
         max_seq_length=int(os.environ.get("APT_RAG_MAX_SEQ_LENGTH", "1024")),
         ocr=os.environ.get("APT_RAG_OCR", "none"),
+        ollama_url=os.environ.get("APT_RAG_OLLAMA_URL", "http://localhost:11434"),
+        llm_model=os.environ.get("APT_RAG_LLM_MODEL", "qwen2.5:7b"),
     )
 
 

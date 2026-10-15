@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,9 +12,10 @@ from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder
 from apt_rag.evaluate import evaluate_csv
 from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
-from apt_rag.models import Chunk, EvalResult, ExcludedSegment, ExtractResult, InspectReport, SearchHit, ValidationReport
+from apt_rag.models import Chunk, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
 from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.pdfinspect import inspect_pdf_file
+from apt_rag.qgen import OllamaClient, generate, load_chunks
 from apt_rag.search import Searcher
 from apt_rag.store import write_index
 from apt_rag.validate import render_report_md, validate
@@ -171,3 +173,36 @@ def evaluate(csv_path: Path, settings: Settings, k: int = 5, searcher: Searcher 
         json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return result
+
+
+def generate_questions(
+    settings: Settings,
+    *,
+    out: Path,
+    count: int = 40,
+    per_article: int = 1,
+    parts: Collection[str] = ("본문",),
+    min_chars: int = 80,
+    seed: int = 42,
+    model: str | None = None,
+    force: bool = False,
+    client: object | None = None,
+    on_progress: Callable[[int, int, Chunk, int | None], None] | None = None,
+) -> GenResult:
+    chunks_path = settings.index_dir / "chunks.json"
+    if not chunks_path.exists():
+        raise FileNotFoundError("색인이 없습니다. 먼저 index 실행: apt-rag index <pdf>")
+    chunks = load_chunks(chunks_path)
+    client = client or OllamaClient(settings.ollama_url, model or settings.llm_model)
+    return generate(
+        chunks,
+        out=Path(out),
+        client=client,
+        count=count,
+        per_article=per_article,
+        parts=parts,
+        min_chars=min_chars,
+        seed=seed,
+        force=force,
+        on_progress=on_progress,
+    )
