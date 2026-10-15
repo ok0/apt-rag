@@ -60,5 +60,5 @@ def test_repo_seed_file_is_valid():
 
 def test_repo_seed_maps_pet_words_to_gachuk():
     syn = load_synonyms(Path(__file__).parents[1] / "synonyms.txt")
-    for q in ("반려동물 키워도 되나요", "강아지 키워도 되나요"):
+    for q in ("반려동물 키워도 되나요", "강아지 키워도 되나요", "반려견 키워도 되나요", "고양이 키워도 되나요"):
         assert "가축" in syn.expand_tokens(tokenize(q))
