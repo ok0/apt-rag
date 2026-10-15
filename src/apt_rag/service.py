@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from apt_rag.answer import DISCLAIMER, NO_HIT_ANSWER, check_citations, generate_answer, rewrite_question
 from apt_rag.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder
 from apt_rag.evaluate import evaluate_csv
 from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
-from apt_rag.models import Chunk, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
+from apt_rag.llm import LLM, OllamaClient, get_llm
+from apt_rag.models import AnswerResult, Chunk, ChatTurn, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
 from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.pdfinspect import inspect_pdf_file
-from apt_rag.llm import OllamaClient
 from apt_rag.qgen import generate, load_chunks
 from apt_rag.search import Searcher
 from apt_rag.store import write_index
@@ -162,6 +163,55 @@ def build_index(
 def search(query: str, settings: Settings, top_n: int = 5, searcher: Searcher | None = None) -> list[SearchHit]:
     searcher = searcher or Searcher(settings)
     return searcher.search(query, top_n=top_n)
+
+
+def answer(
+    question: str,
+    settings: Settings,
+    *,
+    history: Sequence[ChatTurn] = (),
+    top_n: int = 5,
+    min_sim: float | None = None,
+    searcher: Searcher | None = None,
+    llm: LLM | None = None,
+) -> AnswerResult:
+    question = question.strip()
+    if not question:
+        raise ValueError("질문이 비어 있습니다")
+    searcher = searcher or Searcher(settings)
+    used: LLM | None = None
+    rewritten: str | None = None
+    if history:
+        used = llm or get_llm(settings)
+        rewritten = rewrite_question(used, history, question)
+    query = rewritten or question
+    hits = searcher.search(query, top_n=top_n, min_sim=min_sim)
+    if not hits:
+        return AnswerResult(
+            question=question,
+            search_query=query,
+            rewritten_question=rewritten,
+            answer=NO_HIT_ANSWER,
+            disclaimer=DISCLAIMER,
+            hits=[],
+            cited_refs=[],
+            unverified_refs=[],
+            llm=used.name if used else None,
+        )
+    used = used or llm or get_llm(settings)
+    text = generate_answer(used, query, hits)
+    cited, unverified = check_citations(text, hits)
+    return AnswerResult(
+        question=question,
+        search_query=query,
+        rewritten_question=rewritten,
+        answer=text,
+        disclaimer=DISCLAIMER,
+        hits=list(hits),
+        cited_refs=cited,
+        unverified_refs=unverified,
+        llm=used.name,
+    )
 
 
 def evaluate(

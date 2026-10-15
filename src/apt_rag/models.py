@@ -162,3 +162,22 @@ class GenResult:
     selected: int
     questions: list[GeneratedQuestion]
     skipped: list[str]
+
+
+@dataclass
+class ChatTurn:
+    role: str      # "user" | "assistant"
+    content: str
+
+
+@dataclass
+class AnswerResult:
+    question: str                     # 입력 원문(strip)
+    search_query: str                 # 실제 검색/답변에 쓴 질문
+    rewritten_question: str | None    # 이력이 없으면 None
+    answer: str
+    disclaimer: str
+    hits: list[SearchHit]
+    cited_refs: list[str]             # 답변이 인용했고 검색 결과에 있는 article_ref (hits 순서)
+    unverified_refs: list[str]        # 답변이 인용했지만 검색 결과에 없는 표기(공백 제거형)
+    llm: str | None                   # 호출한 LLM 이름, 호출 안 했으면 None
