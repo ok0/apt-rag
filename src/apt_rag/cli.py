@@ -9,6 +9,7 @@ from pathlib import Path
 from apt_rag import __version__
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
+from apt_rag.search import Searcher
 from apt_rag.service import build_index, inspect_pdf
 
 
@@ -73,9 +74,6 @@ def _cmd_index(args: argparse.Namespace) -> int:
     except OcrUnavailableError as exc:
         print(str(exc), file=sys.stderr)
         return 4
-    except NotImplementedError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
     report = result.report
     print("[1/5] 판별 완료")
     print("[2/5] 추출 완료")
@@ -96,11 +94,34 @@ def _cmd_index(args: argparse.Namespace) -> int:
     if args.no_embed:
         print("[4/5] 임베딩: 생략 (--no-embed)")
     else:
-        print("[4/5] 임베딩")
-    print(f"[5/5] 산출물: {result.work_dir}")
+        print(f"[4/5] 임베딩 완료 (차원 {result.dim})")
+    print("[5/5] 저장 완료" if result.indexed else "[5/5] 저장: 건너뜀")
+    print(f"산출물: {result.work_dir}")
     if result.aborted_reason:
         print(f"중단: {result.aborted_reason}", file=sys.stderr)
         return 3
+    return 0
+
+
+def _cmd_search(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    try:
+        hits = Searcher(settings).search(args.query, top_n=args.top_n)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps([asdict(h) for h in hits], ensure_ascii=False, indent=2))
+        return 0
+    for hit in hits:
+        pages = f"p.{hit.page_start}" + (f"-{hit.page_end}" if hit.page_end != hit.page_start else "")
+        meta = [hit.part] + ([f"{hit.chapter}"] if hit.chapter else []) + [pages]
+        print(
+            f"{hit.rank}. {hit.article_ref} {hit.title}  [{' · '.join(meta)}]  "
+            f"score={hit.score:.4f} (vec #{hit.vec_rank or '-'}, bm25 #{hit.bm25_rank or '-'})"
+        )
+        flat = " ".join(hit.text.split())
+        print(f"   {flat[: args.excerpt]}…")
     return 0
 
 
@@ -111,5 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_inspect(args)
     if args.command == "index":
         return _cmd_index(args)
+    if args.command == "search":
+        return _cmd_search(args)
     print("미구현")
     return 2
