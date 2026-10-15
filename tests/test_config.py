@@ -22,3 +22,16 @@ def test_band_env(monkeypatch, tmp_path):
     s = load_settings(tmp_path / ".env")
     assert s.sim_band == 0.05
     assert s.band_top_k == 20
+
+
+def test_llm_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("APT_RAG_LLM", "claude")
+    monkeypatch.setenv("APT_RAG_CLAUDE_MODEL", "m1")
+    s = load_settings(tmp_path / ".env")
+    assert s.llm_provider == "claude"
+    assert s.claude_model == "m1"
+    monkeypatch.delenv("APT_RAG_LLM", raising=False)
+    monkeypatch.delenv("APT_RAG_CLAUDE_MODEL", raising=False)
+    s = load_settings(tmp_path / ".env")
+    assert s.llm_provider == "ollama"
+    assert s.claude_model == "claude-haiku-5-5"

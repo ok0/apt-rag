@@ -15,7 +15,8 @@ from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
 from apt_rag.models import Chunk, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
 from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.pdfinspect import inspect_pdf_file
-from apt_rag.qgen import OllamaClient, generate, load_chunks
+from apt_rag.llm import OllamaClient
+from apt_rag.qgen import generate, load_chunks
 from apt_rag.search import Searcher
 from apt_rag.store import write_index
 from apt_rag.validate import render_report_md, validate

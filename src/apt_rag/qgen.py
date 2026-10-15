@@ -4,11 +4,10 @@ import csv
 import json
 import random
 import re
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
+from apt_rag.llm import OllamaClient, OllamaConnectionError, OllamaError, OllamaModelMissingError  # noqa: F401  (재export)
 from apt_rag.models import Chunk, GenResult, GeneratedQuestion
 
 QUOTES = "\"'“”‘’"
@@ -29,66 +28,6 @@ SYSTEM_PROMPT = (
     "- 질문은 한 줄짜리 문장으로 만드세요.\n"
     "- 설명 없이 JSON만 출력하세요. 형식: {\"questions\": [\"질문1\", \"질문2\"]}"
 )
-
-
-class OllamaError(RuntimeError):
-    pass
-
-
-class OllamaConnectionError(OllamaError):
-    def __init__(self) -> None:
-        super().__init__("ollama에 연결할 수 없습니다. `ollama serve` 실행 여부와 APT_RAG_OLLAMA_URL 확인")
-
-
-class OllamaModelMissingError(OllamaError):
-    def __init__(self, model: str) -> None:
-        super().__init__(f"모델 '{model}'이(가) 없습니다. `ollama pull {model}` 필요")
-
-
-class OllamaClient:
-    def __init__(self, base_url: str, model: str, timeout: float = 120.0) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.model = model
-        self.timeout = timeout
-
-    def _request(self, method: str, path: str, body: dict | None = None) -> dict:
-        data = None if body is None else json.dumps(body).encode("utf-8")
-        request = urllib.request.Request(
-            self.base_url + path,
-            data=data,
-            method=method,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-
-    def check_model(self) -> None:
-        try:
-            tags = self._request("GET", "/api/tags")
-        except urllib.error.URLError as exc:
-            raise OllamaConnectionError() from exc
-        names = {m.get("name", "") for m in tags.get("models", [])}
-        names |= {m.get("model", "") for m in tags.get("models", [])}
-        if self.model not in names and f"{self.model}:latest" not in names:
-            raise OllamaModelMissingError(self.model)
-
-    def chat(self, messages: list[dict], seed: int) -> str:
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0.7, "seed": seed},
-        }
-        try:
-            response = self._request("POST", "/api/chat", body)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                raise OllamaModelMissingError(self.model) from exc
-            raise OllamaError(f"ollama 요청 실패 (HTTP {exc.code})") from exc
-        except urllib.error.URLError as exc:
-            raise OllamaConnectionError() from exc
-        return response.get("message", {}).get("content", "")
 
 
 def load_chunks(path: Path) -> list[Chunk]:

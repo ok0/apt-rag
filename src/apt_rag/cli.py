@@ -10,7 +10,8 @@ from pathlib import Path
 from apt_rag import __version__
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
-from apt_rag.qgen import OllamaError, split_parts
+from apt_rag.llm import LLMError, OllamaError
+from apt_rag.qgen import split_parts
 from apt_rag.search import Searcher
 from apt_rag.service import build_index, evaluate, generate_questions, inspect_pdf
 
