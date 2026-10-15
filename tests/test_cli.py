@@ -74,3 +74,54 @@ def test_search_prints_vec_sim_and_passes_min_sim(monkeypatch, capsys):
     assert main(["search", "반려동물", "--min-sim", "0.3"]) == 0
     assert seen["min_sim"] == 0.3
     assert "vec #1 sim=0.62, bm25 #-" in capsys.readouterr().out
+
+
+def test_search_marks_band_hits(monkeypatch, capsys):
+    class Fake:
+        def __init__(self, settings):
+            pass
+
+        def search(self, query, top_n=5, min_sim=None):
+            return [
+                SearchHit(
+                    rank=1,
+                    article_ref="제93조",
+                    part="본문",
+                    title="발코니 관리",
+                    header="[제93조]",
+                    chapter="",
+                    page_start=1,
+                    page_end=1,
+                    score=0.03,
+                    vec_rank=1,
+                    bm25_rank=2,
+                    vec_sim=0.54,
+                    chunk_id="d:0004",
+                    text="발코니 관리 기준",
+                    via_band=True,
+                )
+            ]
+
+    monkeypatch.setattr(cli, "Searcher", Fake)
+    monkeypatch.setattr(cli, "load_settings", lambda: None)
+    assert main(["search", "베란다 수선"]) == 0
+    out = capsys.readouterr().out
+    assert "벡터와 BM25가 모두 상위" in out
+    assert "vec #1 sim=0.54 구간통과" in out
+
+
+def test_band_options_override_settings(monkeypatch, settings):
+    seen = {}
+
+    class Fake:
+        def __init__(self, settings):
+            seen["sim_band"] = settings.sim_band
+            seen["band_top_k"] = settings.band_top_k
+
+        def search(self, query, top_n=5, min_sim=None):
+            return []
+
+    monkeypatch.setattr(cli, "Searcher", Fake)
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    assert main(["search", "q", "--sim-band", "0.03", "--band-top-k", "7"]) == 0
+    assert seen == {"sim_band": 0.03, "band_top_k": 7}

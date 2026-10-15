@@ -21,6 +21,8 @@ class Settings:
     llm_model: str = "qwen2.5:7b"
     min_vec_sim: float = 0.55
     synonyms_path: Path | None = None
+    sim_band: float = 0.05
+    band_top_k: int = 20
 
     @property
     def work_dir(self) -> Path:
@@ -52,6 +54,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         llm_model=os.environ.get("APT_RAG_LLM_MODEL", "qwen2.5:7b"),
         min_vec_sim=float(os.environ.get("APT_RAG_MIN_VEC_SIM", "0.55")),
         synonyms_path=Path(os.environ.get("APT_RAG_SYNONYMS", "synonyms.txt")).resolve(),
+        sim_band=float(os.environ.get("APT_RAG_SIM_BAND", "0.05")),
+        band_top_k=int(os.environ.get("APT_RAG_BAND_TOP_K", "20")),
     )
 
 

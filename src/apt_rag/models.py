@@ -129,6 +129,7 @@ class SearchHit:
     vec_sim: float | None
     chunk_id: str
     text: str
+    via_band: bool = False
 
 
 @dataclass

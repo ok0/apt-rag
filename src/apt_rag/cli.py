@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 from dataclasses import asdict
@@ -18,6 +19,11 @@ MIN_SIM_HELP = (
     "벡터 유사도 컷오프, 코사인 유사도 하한 (0이면 끔, 기본 APT_RAG_MIN_VEC_SIM 또는 0.55)"
 )
 NO_HIT_MESSAGE = "관련 조항을 찾지 못했습니다. (관리사무소에 문의하세요)"
+SIM_BAND_HELP = (
+    "컷오프 아래 완화 구간 폭. 벡터 후보가 하나도 컷오프를 넘지 못할 때, (컷오프-폭) 이상이면서 벡터·BM25 모두 상위 --band-top-k 안에 든 조항은 통과 (0이면 끔, 기본 APT_RAG_SIM_BAND 또는 0.05)"
+)
+BAND_TOP_K_HELP = "완화 구간의 '상위' 기준 순위 (기본 APT_RAG_BAND_TOP_K 또는 20)"
+BAND_NOTICE = "참고: 벡터 유사도가 기준에 조금 못 미치지만, 벡터와 BM25가 모두 상위에 올린 조항이 있어 결과를 표시합니다."
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -51,12 +57,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--excerpt", type=int, default=160)
     p_search.add_argument("--json", action="store_true")
     p_search.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
+    p_search.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
+    p_search.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
 
     p_eval = sub.add_parser("eval", help="질문 CSV로 검색 적중률 평가")
     p_eval.add_argument("csv")
     p_eval.add_argument("-k", type=int, default=5)
     p_eval.add_argument("--json", action="store_true")
     p_eval.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
+    p_eval.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
+    p_eval.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
 
     p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (로컬 ollama)")
     p_gen.add_argument("--count", type=int, default=40, help="질문을 만들 조항 수 (기본 40)")
@@ -74,6 +84,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_help.add_argument("topic", nargs="?", help="도움말을 볼 명령 이름")
 
     return parser
+
+
+def _with_band_overrides(settings, args: argparse.Namespace):
+    overrides = {}
+    if args.sim_band is not None:
+        overrides["sim_band"] = args.sim_band
+    if args.band_top_k is not None:
+        overrides["band_top_k"] = args.band_top_k
+    return dataclasses.replace(settings, **overrides) if overrides else settings
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
@@ -139,7 +158,7 @@ def _cmd_index(args: argparse.Namespace) -> int:
 
 
 def _cmd_search(args: argparse.Namespace) -> int:
-    settings = load_settings()
+    settings = _with_band_overrides(load_settings(), args)
     try:
         hits = Searcher(settings).search(args.query, top_n=args.top_n, min_sim=args.min_sim)
     except FileNotFoundError as exc:
@@ -151,10 +170,12 @@ def _cmd_search(args: argparse.Namespace) -> int:
     if not hits:
         print(NO_HIT_MESSAGE)
         return 0
+    if any(h.via_band for h in hits):
+        print(BAND_NOTICE)
     for hit in hits:
         pages = f"p.{hit.page_start}" + (f"-{hit.page_end}" if hit.page_end != hit.page_start else "")
         meta = [hit.part] + ([f"{hit.chapter}"] if hit.chapter else []) + [pages]
-        vec = f"vec #{hit.vec_rank} sim={hit.vec_sim:.2f}" if hit.vec_rank else "vec #-"
+        vec = f"vec #{hit.vec_rank} sim={hit.vec_sim:.2f}" + (" 구간통과" if hit.via_band else "") if hit.vec_rank else "vec #-"
         print(
             f"{hit.rank}. {hit.article_ref} {hit.title}  [{' · '.join(meta)}]  "
             f"score={hit.score:.4f} ({vec}, bm25 #{hit.bm25_rank or '-'})"
@@ -169,7 +190,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     if not csv_path.exists():
         print(f"파일을 찾을 수 없습니다: {csv_path}", file=sys.stderr)
         return 1
-    settings = load_settings()
+    settings = _with_band_overrides(load_settings(), args)
     try:
         result = evaluate(csv_path, settings, k=args.k, min_sim=args.min_sim)
     except (FileNotFoundError, ValueError) as exc:

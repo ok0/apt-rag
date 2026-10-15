@@ -200,3 +200,100 @@ def test_synonym_questions_get_same_bm25_ranks(settings, hash_embedder):
     r2 = {h.chunk_id: h.bm25_rank for h in s.search(q2, 10, min_sim=0)}
     assert r1 == r2
     assert r1["d:0001"] is not None
+
+
+class FixedSimEmbedder:
+    model_name = "fake-fixed"
+
+    def __init__(self, sims: dict[str, float], default: float = 0.10):
+        self.sims, self.default = sims, default
+
+    def _doc(self, text):
+        s = next((v for ref, v in self.sims.items() if f"[{ref}]" in text), self.default)
+        return [s, (1 - s * s) ** 0.5, 0.0, 0.0]
+
+    def embed_documents(self, texts):
+        return [self._doc(t) for t in texts]
+
+    def embed_query(self, text):
+        return [1.0, 0.0, 0.0, 0.0]
+
+
+def band_setup(settings, sim, query="베란다 수선", **overrides):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제93조", "세대 발코니 관리 기준"),
+        make_chunk(2, "제19조", "발코니 수선 수선 공사 절차"),
+        make_chunk(3, "제6조", "주차장 이용 시간은 별도로 정한다."),
+        make_chunk(4, "제7조", "관리비 납부 기한을 정한다."),
+    ]
+    emb = FixedSimEmbedder({"제93조": sim, "제19조": 0.40})
+    fields = dict(min_vec_sim=0.55, sim_band=0.05, band_top_k=5)
+    fields.update(overrides)
+    s = dataclasses.replace(settings, **fields)
+    build(s, emb, chunks)
+    return Searcher(s, emb, synonyms=Synonyms([["베란다", "발코니"]])), query
+
+
+def test_band_rescues_0_5448_when_bm25_agrees(settings):
+    searcher, q = band_setup(settings, 0.5448)
+    hits = searcher.search(q, 5)
+    assert hits
+    assert hits[0].article_ref == "제93조"
+    assert hits[0].via_band is True
+    assert hits[0].vec_rank == 1
+    assert hits[0].vec_sim == pytest.approx(0.5448, abs=1e-3)
+    for h in hits[1:]:
+        assert h.via_band is False
+        assert h.vec_rank is None
+
+
+def test_strong_pass_0_5514_not_marked_band(settings):
+    searcher, q = band_setup(settings, 0.5514)
+    hits = searcher.search(q, 5)
+    assert hits[0].article_ref == "제93조"
+    assert hits[0].via_band is False
+
+
+def test_band_needs_bm25_evidence(settings):
+    searcher, _ = band_setup(settings, 0.5448)
+    assert searcher.search("xyz", 5) == []
+
+
+def test_below_band_stays_empty(settings):
+    searcher, q = band_setup(settings, 0.4990)
+    assert searcher.search(q, 5) == []
+
+
+def test_band_disabled_with_zero(settings):
+    searcher, q = band_setup(settings, 0.5448, sim_band=0)
+    assert searcher.search(q, 5) == []
+
+
+def test_band_top_k_limits_bm25_rank(settings):
+    searcher, q = band_setup(settings, 0.5448, band_top_k=1)
+    assert searcher.search(q, 5) == []
+    searcher, q = band_setup(settings, 0.5448, band_top_k=2)
+    hits = searcher.search(q, 5)
+    assert hits[0].via_band is True
+
+
+def test_synonyms_enable_band_rescue(settings):
+    searcher, q = band_setup(settings, 0.5448)
+    plain = Searcher(
+        dataclasses.replace(settings, min_vec_sim=0.55, sim_band=0.05, band_top_k=5),
+        FixedSimEmbedder({"제93조": 0.5448, "제19조": 0.40}),
+        synonyms=Synonyms([]),
+    )
+    assert plain.search(q, 5) == []
+    hits = searcher.search(q, 5)
+    assert hits
+    assert hits[0].via_band is True
+
+
+def test_min_sim_zero_ignores_band(settings):
+    searcher, q = band_setup(settings, 0.5448)
+    hits = searcher.search(q, 5, min_sim=0)
+    assert all(h.via_band is False for h in hits)
+    top = next(h for h in hits if h.article_ref == "제93조")
+    assert top.vec_rank == 1
