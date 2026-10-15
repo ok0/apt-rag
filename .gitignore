@@ -21,3 +21,4 @@ data/
 .cache/
 .hf_cache/
 models/
+.claude
