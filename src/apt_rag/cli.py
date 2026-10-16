@@ -12,6 +12,7 @@ from apt_rag.answer import load_history
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
 from apt_rag.llm import LLMError
+from apt_rag.models import page_range
 from apt_rag.qgen import split_parts
 from apt_rag.search import Searcher
 from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
@@ -190,7 +191,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
     if any(h.via_band for h in hits):
         print(BAND_NOTICE)
     for hit in hits:
-        pages = f"p.{hit.page_start}" + (f"-{hit.page_end}" if hit.page_end != hit.page_start else "")
+        pages = page_range(hit.page_start, hit.page_end)
         meta = [hit.part] + ([f"{hit.chapter}"] if hit.chapter else []) + [pages]
         vec = f"vec #{hit.vec_rank} sim={hit.vec_sim:.2f}" + (" 구간통과" if hit.via_band else "") if hit.vec_rank else "vec #-"
         print(
@@ -284,7 +285,7 @@ def _cmd_ask(args: argparse.Namespace) -> int:
         print("근거로 검색된 조항:")
         for h in result.hits:
             print(
-                f"- {h.article_ref} {h.title} (p.{h.page_start}{'-' + str(h.page_end) if h.page_end != h.page_start else ''})"
+                f"- {h.article_ref} {h.title} ({page_range(h.page_start, h.page_end)})"
                 + (" [인용]" if h.article_ref in result.cited_refs else "")
             )
     if result.unverified_refs:

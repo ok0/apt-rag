@@ -8,7 +8,7 @@ from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
 from apt_rag.llm import LLM
-from apt_rag.models import Chunk, GenResult, GeneratedQuestion
+from apt_rag.models import Chunk, GenResult, GeneratedQuestion, page_range
 
 QUOTES = "\"'“”‘’"
 MIN_QUESTION_CHARS = 8
@@ -106,12 +106,6 @@ def _dedupe_key(question: str) -> str:
     return re.sub(r"\s", "", question)
 
 
-def page_label(chunk: Chunk) -> str:
-    if chunk.page_end != chunk.page_start:
-        return f"{chunk.page_start}-{chunk.page_end}"
-    return str(chunk.page_start)
-
-
 def write_questions_csv(path: Path, rows: list[GeneratedQuestion]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="") as f:
@@ -180,7 +174,7 @@ def generate(
                     question=question,
                     expected_article=chunk.article_ref,
                     source_title=chunk.title,
-                    source_pages=page_label(chunk),
+                    source_pages=page_range(chunk.page_start, chunk.page_end, prefix=""),
                 )
             )
         if on_progress:

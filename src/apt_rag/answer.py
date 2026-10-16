@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from apt_rag.llm import LLM, LLMError
-from apt_rag.models import ChatTurn, SearchHit
+from apt_rag.models import ChatTurn, SearchHit, page_range
 
 DISCLAIMER = "※ 이 답변은 참고용이며, 최종 해석은 관리사무소에 확인하세요."
 NO_HIT_ANSWER = "관리규약에서 질문과 관련된 조항을 찾지 못했습니다. 관리사무소에 문의해 주세요."
@@ -102,17 +102,10 @@ def rewrite_question(llm: LLM, history: Sequence[ChatTurn], question: str) -> st
     return clean_rewrite(raw, question)
 
 
-def _pages(hit: SearchHit) -> str:
-    label = f"p.{hit.page_start}"
-    if hit.page_end != hit.page_start:
-        label += f"-{hit.page_end}"
-    return label
-
-
 def build_answer_messages(question: str, hits: Sequence[SearchHit]) -> list[dict[str, str]]:
     blocks = []
     for hit in hits:
-        location = " · ".join([hit.part] + ([hit.chapter] if hit.chapter else []) + [_pages(hit)])
+        location = " · ".join([hit.part] + ([hit.chapter] if hit.chapter else []) + [page_range(hit.page_start, hit.page_end)])
         blocks.append(
             f'<조항 번호="{_attr(hit.article_ref)}" 제목="{_attr(hit.title)}" 위치="{_attr(location)}">\n'
             f"{_escape(hit.text)}\n"

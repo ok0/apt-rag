@@ -9,6 +9,13 @@ def count_content_chars(s: str) -> int:
     return len(re.findall(r"[가-힣A-Za-z0-9]", s))
 
 
+def page_range(start: int, end: int, prefix: str = "p.") -> str:
+    label = f"{prefix}{start}"
+    if end != start:
+        label += f"-{end}"
+    return label
+
+
 @dataclass
 class PageInfo:
     page: int
