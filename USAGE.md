@@ -32,6 +32,7 @@ uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generate
 - `ask`: 검색된 조항을 근거로 LLM이 답변합니다. 자세한 내용은 아래 '답변 생성 (ask)' 절을 참고하세요.
 - `eval`: 질문 CSV로 hit@k 검색 적중률을 측정합니다. 컷오프로 결과가 비면 실패로 집계합니다. CSV는 UTF-8이며 `question,expected_article` 컬럼이 필요합니다. 정답 조문이 여러 개면 `;`로 구분하며, 상위 k개 중 하나라도 맞으면 적중입니다. 샘플은 `eval/sample_questions.csv`(15문항)이고, 실제 평가용 30~50문항은 같은 형식으로 작성합니다.
 - `eval-ask`: 질문마다 `ask`와 같은 답변을 만든 뒤, 검색과 생성 중 어디서 실패했는지 분류합니다. 입력 CSV는 `eval`과 같습니다. 정답이 빈 행은 "규약에 없는 질문"으로 취급합니다. 분류는 아래 표 순서로 판정하며, 첫 줄 건수 요약과 함께 `cited`, `unanswerable_refused`가 아닌 문항만 목록으로 출력합니다.
+  진행 상황은 stderr에 `[i/N] 분류 · 질문 앞 40자`로 한 줄씩 표시되며(`--json`의 stdout에는 섞이지 않습니다). 행마다 `work_dir/eval/ask-eval-{시각}.partial.jsonl`에 기록되고, 끝까지 완료되면 삭제됩니다. 중단(Ctrl+C)하거나 오류로 끊기면 partial 파일이 남아 그때까지의 결과를 확인할 수 있습니다.
 
 | 분류 | 의미 |
 |---|---|
