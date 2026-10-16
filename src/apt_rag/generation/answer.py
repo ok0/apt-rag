@@ -143,11 +143,13 @@ def pure_refusal_text(answer: str) -> str | None:
     if NOT_FOUND_MARK not in answer:
         return None
     rest = re.sub(r"\([^)]*\)", "", answer)
-    rest = re.sub(r"관리규약에서[^.]*찾지 못했습니다\.", "", rest)
+    rest = re.sub(rf"[^.?!\n]*{NOT_FOUND_MARK}[^.?!\n]*[.?!]?", "", rest)
     rest = re.sub(r"관리사무소에 문의해 주세요\.?", "", rest)
-    if re.sub(r"\s+", "", rest):
+    if re.sub(r"[\W_]+", "", rest):
         return None
-    return re.sub(r"\s*\([^)]*\)", "", answer).strip()
+    text = re.sub(r"\s*\([^)]*\)", "", answer)
+    text = re.sub(r"(?<=[.?!])[\s,]*,[\s,]*", " ", text)
+    return re.sub(r"[\s,]+$", "", text).strip()
 
 
 def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], list[str]]:

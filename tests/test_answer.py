@@ -12,6 +12,7 @@ from apt_rag.generation.answer import (
     check_citations,
     load_history,
     parse_history,
+    pure_refusal_text,
 )
 from apt_rag.generation.llm import LLMError
 from apt_rag.models import ChatTurn, SearchHit
@@ -211,6 +212,41 @@ def test_pure_refusal_drops_citation(settings):
     assert result.unverified_refs == []
     assert "(제29조)" not in result.answer
     assert result.answer == "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요."
+
+
+def test_pure_refusal_ignores_trailing_citation_list():
+    answer = (
+        "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요. "
+        "(제85조), (제86조), (제83조), (제89조), (제5조), (별표 3)"
+    )
+    assert pure_refusal_text(answer) == "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요."
+
+
+def test_pure_refusal_with_leading_refusal_sentence_and_citation():
+    answer = (
+        "관리사무소가 주차장에서 차량 접촉사고에 대한 책임을 지는지에 대한 명확한 근거를 찾지 못했습니다. "
+        "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요. (제96조)"
+    )
+    refusal = pure_refusal_text(answer)
+    assert refusal is not None
+    assert "(제" not in refusal
+    assert refusal.endswith("관리사무소에 문의해 주세요.")
+
+
+def test_refusal_with_substantive_sentence_is_not_pure():
+    answer = (
+        "월급은 관리규약에서 정한 기준을 찾지 못했습니다. "
+        "관리규약은 최저임금 이상으로 하되 관리주체가 정합니다 (제9조제4항)."
+    )
+    assert pure_refusal_text(answer) is None
+
+
+def test_refusal_followed_by_explanation_is_not_pure():
+    answer = (
+        "관리규약에서 해당 내용을 찾지 못했습니다. "
+        "관리주체나 경비원에 대한 처우는 제89조에 있으나 세부 기준은 별도로 정합니다 (제89조)."
+    )
+    assert pure_refusal_text(answer) is None
 
 
 def test_partial_answer_keeps_citation(settings):

@@ -135,6 +135,28 @@ def test_evaluate_answers_pure_refusal_stays_refused(settings, tmp_path):
     assert result.rows[2].refused is True
 
 
+def test_evaluate_answers_refusal_with_citation_tail_stays_refused(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+            "우주선 발사 비용은 얼마인가요": [make_hit(1, "제5조")],
+        }
+    )
+    llm = FakeLLM(
+        [
+            "목줄을 해야 합니다 (제23조)",
+            "점검 주기는 조항에 있습니다",
+            "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요. (제85조), (제86조), (별표 3)",
+        ]
+    )
+    result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
+
+    assert result.rows[2].category == "unanswerable_refused"
+    assert result.rows[2].refused is True
+
+
 def test_evaluate_answers_reports_each_row(settings, tmp_path):
     csv_path = write_csv(tmp_path / "ask.csv")
     searcher = FakeSearcher(
