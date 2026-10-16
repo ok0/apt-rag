@@ -522,7 +522,7 @@ def test_answer_sends_schema_and_few_shot_messages(settings):
 
 
 def test_few_shot_assistant_turns_are_valid():
-    assert len(FEW_SHOT) == 6
+    assert len(FEW_SHOT) == 8
     for i in range(0, len(FEW_SHOT), 2):
         user, assistant = FEW_SHOT[i], FEW_SHOT[i + 1]
         assert user["role"] == "user"
@@ -563,3 +563,7 @@ def test_answer_parse_failure_twice_leaves_answerable_none(settings):
     assert result.fallback == "parse"
     assert result.answerable is None
     assert result.evidence == ""
+
+
+def test_answer_prompt_has_paraphrase_rule():
+    assert "일상 표현" in ANSWER_SYSTEM_PROMPT
