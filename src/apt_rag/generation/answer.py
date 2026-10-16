@@ -373,6 +373,10 @@ _NORM_DROP = re.compile(r"[^0-9A-Za-z가-힣㐀-䶿一-鿿]")
 _SEG_SPLIT = re.compile(r"\n+|…|\.{3,}|(?<=\.)\s+")
 _LEAD_REF = re.compile(r"^\s*[(\[]?\s*(?:별표\s*\d+|별지\s*제\s*\d+(?:-\d+)?\s*호\s*서식|(?:별첨\s*\d+\s*|부칙\s*)?제\s*\d+\s*조(?:\s*의\s*\d+)?(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?)\s*[)\]]?\s*[:：]?\s*")
 _TRAIL_REF = re.compile(r"\s*\((?:별표|별지|별첨|부칙|제\s*\d)[^)]*\)\s*\.?\s*$")
+LIST_TAIL_MIN_CHARS = 4
+_LIST_HEAD = re.compile(r"다음\s*각\s*호")
+_LIST_ITEM = re.compile(r"^\s*\d+\.\s*(\S.*)$")
+_LIST_JOSA = "을를이가은는"
 
 
 @dataclass
@@ -410,8 +414,45 @@ def normalize_for_match(s: str) -> str:
     return _NORM_DROP.sub("", s).lower()
 
 
+def _list_blocks(text: str) -> list[tuple[str, str, list[str]]]:
+    lines = text.split("\n")
+    blocks: list[tuple[str, str, list[str]]] = []
+    for i, line in enumerate(lines):
+        m = _LIST_HEAD.search(line)
+        if not m:
+            continue
+        items: list[str] = []
+        for nxt in lines[i + 1 :]:
+            mi = _LIST_ITEM.match(nxt)
+            if not mi:
+                break
+            item = normalize_for_match(mi.group(1))
+            if item:
+                items.append(item)
+        if items:
+            blocks.append((normalize_for_match(line[: m.start()]), normalize_for_match(line[m.start() :]), items))
+    return blocks
+
+
+def _matches_list_item(seg: str, blocks: list[tuple[str, str, list[str]]]) -> bool:
+    for prefix, rest, items in blocks:
+        for item in items:
+            start = seg.find(item)
+            while start != -1:
+                before, after = seg[:start], seg[start + len(item) :]
+                if prefix.endswith(before):
+                    if not after:
+                        return True
+                    tail = after[1:] if after[0] in _LIST_JOSA else after
+                    if len(tail) >= LIST_TAIL_MIN_CHARS and rest.endswith(tail):
+                        return True
+                start = seg.find(item, start + 1)
+    return False
+
+
 def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None:
     normed = [normalize_for_match(h.text) for h in hits]
+    lists = [_list_blocks(h.text) for h in hits]
     segs = []
     for raw in _SEG_SPLIT.split(evidence):
         seg = _TRAIL_REF.sub("", _LEAD_REF.sub("", raw))
@@ -423,6 +464,8 @@ def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None
     matched: list[int] = []
     for n in segs:
         idx = [i for i, h in enumerate(normed) if n in h]
+        if not idx:
+            idx = [i for i, blocks in enumerate(lists) if _matches_list_item(n, blocks)]
         if not idx:
             return None
         for i in idx:

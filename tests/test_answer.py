@@ -411,6 +411,48 @@ def test_match_evidence_returns_matched_indices():
     assert match_evidence(evidence, hits) == [0, 2]
 
 
+LIST_TEXT = (
+    "② 입주자등은 오후 10시부터 다음날 오전 6시까지 다음 각 호의 행위를 금지한다.\n"
+    "1. 뛰거나 문을 크게 소리 나게 닫는 행위\n"
+    "2. 피아노 등 악기의 연주\n"
+    "③ 입주자등은 오후 10시부터 다음날 오전 6시까지 다음 각 호의 행위를 자제한다.\n"
+    "1. 세탁, 청소 등 소음을 발생하는 가사일"
+)
+LIST_MERGED_PIANO = "입주자등은 오후 10시부터 다음날 오전 6시까지 피아노 등 악기의 연주를 금지한다."
+
+
+def test_match_evidence_accepts_list_item_merged_into_head():
+    hit = make_hit(1, "제98조", text=LIST_TEXT)
+    assert match_evidence(LIST_MERGED_PIANO, [hit]) == [0]
+    assert match_evidence(
+        "입주자등은 오후 10시부터 다음날 오전 6시까지 세탁, 청소 등 소음을 발생하는 가사일을 자제한다.", [hit]
+    ) == [0]
+    assert match_evidence("피아노 등 악기의 연주를 금지한다.", [hit]) == [0]
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "입주자등은 오후 10시부터 다음날 오전 6시까지 피아노 등 악기의 연주를 자제한다.",
+        "입주자등은 오후 10시부터 다음날 오전 6시까지 세탁, 청소 등 소음을 발생하는 가사일을 금지한다.",
+        "입주자등은 오후 10시부터 다음날 오전 6시까지 피아노 등 악기의 연주를 허용한다.",
+        "입주자등은 오후 11시부터 다음날 오전 7시까지 피아노 등 악기의 연주를 금지한다.",
+        "입주자등은 오후 10시부터 다음날 오전 6시까지 피아노 등 악기의 연주를 한다.",
+    ],
+)
+def test_match_evidence_rejects_list_item_with_wrong_head(evidence):
+    hit = make_hit(1, "제98조", text=LIST_TEXT)
+    assert match_evidence(evidence, [hit]) is None
+
+
+def test_match_evidence_list_item_returns_hit_with_list():
+    hits = [
+        make_hit(1, "제1조", text="첫 번째 조항의 내용입니다."),
+        make_hit(2, "제98조", text=LIST_TEXT),
+    ]
+    assert match_evidence(LIST_MERGED_PIANO, hits) == [1]
+
+
 def test_foreign_tokens_detects_chinese():
     assert foreign_tokens("不允许在晚上 10시 이후 사용합니다", [make_hit(1, "제1조")]) == ["不允许在晚上"]
 
@@ -499,6 +541,18 @@ def test_answer_evidence_and_language_notes_attached_together(settings):
     assert RETRY_NOTE_EVIDENCE in last
     assert RETRY_NOTE_KOREAN in last
     assert result.fallback == "evidence+language"
+
+
+def test_answer_accepts_list_item_merged_evidence(settings):
+    result, llm = _answer_with(
+        settings,
+        [reply("밤에는 연주할 수 없습니다 (제98조)", evidence=LIST_MERGED_PIANO)],
+        hits=[make_hit(1, "제98조", text=LIST_TEXT)],
+    )
+    assert len(llm.calls) == 1
+    assert result.fallback is None
+    assert result.answer == "밤에는 연주할 수 없습니다 (제98조)"
+    assert result.cited_refs == ["제98조"]
 
 
 def test_answer_cited_refs_union_of_evidence_and_answer(settings):
