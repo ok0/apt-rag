@@ -8,14 +8,14 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, check_citations, generate_answer, rewrite_question
+from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, NOT_FOUND_MARK, check_citations, generate_answer, rewrite_question
 from apt_rag.ingest.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
 from apt_rag.retrieval.embed import BgeM3Embedder, Embedder
-from apt_rag.retrieval.evaluate import evaluate_csv
+from apt_rag.retrieval.evaluate import evaluate_csv, load_questions, normalize_ref, parse_expected
 from apt_rag.ingest.extract import extract_pdf, write_extracted_md, write_pages_json
 from apt_rag.generation.llm import LLM, get_llm
-from apt_rag.models import AnswerResult, Chunk, ChatTurn, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
+from apt_rag.models import AnswerResult, AskEvalResult, AskEvalRow, Chunk, ChatTurn, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
 from apt_rag.ingest.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.ingest.pdfinspect import inspect_pdf_file
 from apt_rag.generation.qgen import generate, load_chunks
@@ -231,6 +231,80 @@ def evaluate(
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     (out_dir / f"eval-{stamp}.json").write_text(
+        json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return result
+
+
+ASK_EVAL_CATEGORIES = (
+    "cited",
+    "retrieved_not_cited",
+    "rank_beyond_k",
+    "cut_by_min_sim",
+    "not_in_candidates",
+    "unanswerable_refused",
+    "unanswerable_answered",
+)
+
+
+def evaluate_answers(
+    csv_path: Path,
+    settings: Settings,
+    *,
+    k: int = 5,
+    min_sim: float | None = None,
+    searcher: Searcher | None = None,
+    llm: LLM | None = None,
+) -> AskEvalResult:
+    searcher = searcher or Searcher(settings)
+    llm = llm or get_llm(settings)
+    rows: list[AskEvalRow] = []
+    for question, cell in load_questions(Path(csv_path)):
+        expected = parse_expected(cell)
+        res = answer(question, settings, top_n=k, min_sim=min_sim, searcher=searcher, llm=llm)
+        refused = NOT_FOUND_MARK in res.answer and not res.cited_refs
+        if not expected:
+            category = "unanswerable_refused" if refused else "unanswerable_answered"
+            gold_rank = None
+        else:
+            nocut = searcher.search(question, top_n=50, min_sim=0)
+            gold_rank = next(
+                (i for i, h in enumerate(nocut, 1) if normalize_ref(h.article_ref) in expected),
+                None,
+            )
+            hit_n = {normalize_ref(h.article_ref) for h in res.hits}
+            cited_n = {normalize_ref(r) for r in res.cited_refs}
+            if any(e in cited_n for e in expected):
+                category = "cited"
+            elif any(e in hit_n for e in expected):
+                category = "retrieved_not_cited"
+            elif gold_rank is None:
+                category = "not_in_candidates"
+            elif gold_rank <= k:
+                category = "cut_by_min_sim"
+            else:
+                category = "rank_beyond_k"
+        rows.append(
+            AskEvalRow(
+                question=question,
+                expected=expected,
+                category=category,
+                gold_rank=gold_rank,
+                hits=[h.article_ref for h in res.hits],
+                cited_refs=list(res.cited_refs),
+                unverified_refs=list(res.unverified_refs),
+                refused=refused,
+                answer=res.answer,
+            )
+        )
+    counts = {name: 0 for name in ASK_EVAL_CATEGORIES}
+    for row in rows:
+        counts[row.category] += 1
+    result = AskEvalResult(k=k, total=len(rows), counts=counts, rows=rows)
+    out_dir = settings.work_dir / "eval"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    (out_dir / f"ask-eval-{stamp}.json").write_text(
         json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return result
