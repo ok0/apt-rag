@@ -23,6 +23,7 @@ APPENDIX_RE = re.compile(r"^[\[〔【]\s*(별표|별지|별첨)\s*([^\]〕】]{0
 PARTICLE_START_RE = re.compile(r"^[에의와과를을로은는이가]")
 CIRCLED_RE = re.compile(r"^([①-⑳㉑-㉟㊱-㊿])")
 STRUCT_MISC_RE = re.compile(r"^(?:\d{1,2}\.\s|[가-하]\.\s|\(\d+\)|\d+\)|[가-하]\)|[※*•▪○●◦□■▶◇◆]|-\s|<)")
+APPENDIX_MARKERS = frozenset({"별표", "별지", "별지서식", "별첨"})
 
 
 def circled_to_int(ch: str) -> int:
@@ -56,7 +57,7 @@ def is_structural(t: str) -> bool:
         or STRUCT_MISC_RE.match(t)
     ):
         return True
-    return re.sub(r"\s", "", t) in {"별표", "별지", "별지서식", "별첨"}
+    return re.sub(r"\s", "", t) in APPENDIX_MARKERS
 
 
 def _cell_text(value: object) -> str:

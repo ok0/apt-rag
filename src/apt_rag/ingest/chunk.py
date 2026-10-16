@@ -8,6 +8,7 @@ from pathlib import Path
 
 from apt_rag.ingest.extract import (
     ADDENDA_RE,
+    APPENDIX_MARKERS,
     ARTICLE_HEAD_RE,
     CHAPTER_RE,
     CIRCLED_RE,
@@ -221,7 +222,7 @@ class _Builder:
             self.structure.append(line)
             self.new_unit()
             return
-        if re.sub(r"\s", "", t) in {"별표", "별지", "별지서식", "별첨"}:
+        if re.sub(r"\s", "", t) in APPENDIX_MARKERS:
             self.structure.append(line)
             return
         dm = DELETED_RE.match(t)
