@@ -3,7 +3,7 @@ from __future__ import annotations
 import unicodedata
 from pathlib import Path
 
-from apt_rag.bm25 import tokenize
+from apt_rag.retrieval.bm25 import tokenize
 
 
 def parse_synonyms(text: str, source: str = "<synonyms>") -> list[list[str]]:

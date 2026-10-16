@@ -2,14 +2,14 @@ import dataclasses
 
 import pytest
 
-from apt_rag.bm25 import tokenize
+from apt_rag.retrieval.bm25 import tokenize
 from apt_rag.config import Settings
-from apt_rag.embed import BgeM3Embedder
+from apt_rag.retrieval.embed import BgeM3Embedder
 from apt_rag.models import Chunk
-from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
-from apt_rag.search import Searcher, rrf
-from apt_rag.store import IndexMismatchError, load_index, write_index
-from apt_rag.synonyms import Synonyms
+from apt_rag.ingest.ocr import OcrUnavailableError, get_ocr_engine
+from apt_rag.retrieval.search import Searcher, rrf
+from apt_rag.retrieval.store import IndexMismatchError, load_index, write_index
+from apt_rag.retrieval.synonyms import Synonyms
 
 
 def make_chunk(seq, ref, text, paragraph_no=None):

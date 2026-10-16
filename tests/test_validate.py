@@ -1,8 +1,8 @@
 import dataclasses
 
-from apt_rag.chunk import build_units, chunk_units
+from apt_rag.ingest.chunk import build_units, chunk_units
 from apt_rag.models import ExtractResult, Line, count_content_chars
-from apt_rag.validate import validate
+from apt_rag.ingest.validate import validate
 
 
 def L(text, page=1):

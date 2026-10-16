@@ -3,7 +3,7 @@ from dataclasses import asdict
 
 import pytest
 
-from apt_rag.answer import (
+from apt_rag.generation.answer import (
     ANSWER_SYSTEM_PROMPT,
     DISCLAIMER,
     NO_HIT_ANSWER,
@@ -12,7 +12,7 @@ from apt_rag.answer import (
     load_history,
     parse_history,
 )
-from apt_rag.llm import LLMError
+from apt_rag.generation.llm import LLMError
 from apt_rag.models import ChatTurn, SearchHit
 from apt_rag.service import answer
 

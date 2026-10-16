@@ -1,8 +1,8 @@
 import pytest
 
-from apt_rag.evaluate import evaluate_csv, normalize_ref
-from apt_rag.search import Searcher
-from apt_rag.store import write_index
+from apt_rag.retrieval.evaluate import evaluate_csv, normalize_ref
+from apt_rag.retrieval.search import Searcher
+from apt_rag.retrieval.store import write_index
 from test_search import build, make_chunk
 
 

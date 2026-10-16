@@ -9,7 +9,7 @@ from pathlib import Path
 import pymupdf
 
 from apt_rag.models import ExtractResult, InspectReport, Line, RemovedLine, count_content_chars
-from apt_rag.ocr import OcrEngine
+from apt_rag.ingest.ocr import OcrEngine
 
 PAGE_NUM_RE = re.compile(r"^(?:[-–—]\s*)?\d{1,4}(?:\s*[-–—])?$|^\d{1,4}\s*/\s*\d{1,4}$")
 TERMINAL_RE = re.compile(r"(?:[.。:]|다)$")

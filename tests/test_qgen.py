@@ -4,10 +4,10 @@ import pytest
 
 from apt_rag.cli import main
 from apt_rag.config import Settings
-from apt_rag.evaluate import load_questions
-from apt_rag.llm import OllamaClient, OllamaConnectionError
+from apt_rag.retrieval.evaluate import load_questions
+from apt_rag.generation.llm import OllamaClient, OllamaConnectionError
 from apt_rag.models import Chunk
-from apt_rag.qgen import SYSTEM_PROMPT, generate, select_chunks, split_parts
+from apt_rag.generation.qgen import SYSTEM_PROMPT, generate, select_chunks, split_parts
 from apt_rag.service import generate_questions
 
 

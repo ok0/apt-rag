@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from apt_rag.models import EvalFailure, EvalResult
 
 if TYPE_CHECKING:
-    from apt_rag.search import Searcher
+    from apt_rag.retrieval.search import Searcher
 
 
 def normalize_ref(s: str) -> str:

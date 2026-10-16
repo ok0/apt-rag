@@ -1,5 +1,5 @@
-from apt_rag.chunk import build_units, chunk_units
-from apt_rag.extract import is_appendix_heading
+from apt_rag.ingest.chunk import build_units, chunk_units
+from apt_rag.ingest.extract import is_appendix_heading
 from apt_rag.models import Line
 
 

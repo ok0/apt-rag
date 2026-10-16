@@ -9,7 +9,7 @@ import chromadb
 import chromadb.config
 from chromadb.errors import NotFoundError
 
-from apt_rag.bm25 import BM25Index
+from apt_rag.retrieval.bm25 import BM25Index
 from apt_rag.config import Settings
 from apt_rag.models import Chunk
 

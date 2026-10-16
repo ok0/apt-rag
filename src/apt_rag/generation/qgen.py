@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
-from apt_rag.llm import LLM
+from apt_rag.generation.llm import LLM
 from apt_rag.models import Chunk, GenResult, GeneratedQuestion, page_range
 
 QUOTES = "\"'“”‘’"

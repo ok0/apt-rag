@@ -8,15 +8,15 @@ from dataclasses import asdict
 from pathlib import Path
 
 from apt_rag import __version__
-from apt_rag.answer import load_history
+from apt_rag.generation.answer import load_history
 from apt_rag.config import Settings, load_settings
-from apt_rag.ocr import OcrUnavailableError
-from apt_rag.llm import LLMError
+from apt_rag.ingest.ocr import OcrUnavailableError
+from apt_rag.generation.llm import LLMError
 from apt_rag.models import Chunk, page_range
-from apt_rag.qgen import split_parts
-from apt_rag.search import Searcher
+from apt_rag.generation.qgen import split_parts
+from apt_rag.retrieval.search import Searcher
 from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
-from apt_rag.store import IndexMismatchError
+from apt_rag.retrieval.store import IndexMismatchError
 
 
 MIN_SIM_HELP = (

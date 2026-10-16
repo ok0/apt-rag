@@ -1,8 +1,8 @@
 import pytest
 
-from apt_rag.extract import PAGE_NUM_RE, extract_pdf, table_to_markdown
-from apt_rag.ocr import NullOcr, OcrUnavailableError
-from apt_rag.pdfinspect import inspect_pdf_file
+from apt_rag.ingest.extract import PAGE_NUM_RE, extract_pdf, table_to_markdown
+from apt_rag.ingest.ocr import NullOcr, OcrUnavailableError
+from apt_rag.ingest.pdfinspect import inspect_pdf_file
 from apt_rag.service import extract
 from pdf_factory import make_pdf
 

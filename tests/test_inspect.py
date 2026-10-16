@@ -1,4 +1,4 @@
-from apt_rag.pdfinspect import inspect_pdf_file
+from apt_rag.ingest.pdfinspect import inspect_pdf_file
 from pdf_factory import make_pdf
 
 

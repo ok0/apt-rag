@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from apt_rag.chunk import MAX_CHARS, Unit, article_label, article_no_of, article_ref
+from apt_rag.ingest.chunk import MAX_CHARS, Unit, article_label, article_no_of, article_ref
 from apt_rag.models import (
     Chunk,
     ExcludedSegment,

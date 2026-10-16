@@ -8,20 +8,20 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from apt_rag.answer import DISCLAIMER, NO_HIT_ANSWER, check_citations, generate_answer, rewrite_question
-from apt_rag.chunk import build_units, chunk_units, write_chunks_json
+from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, check_citations, generate_answer, rewrite_question
+from apt_rag.ingest.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
-from apt_rag.embed import BgeM3Embedder, Embedder
-from apt_rag.evaluate import evaluate_csv
-from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
-from apt_rag.llm import LLM, get_llm
+from apt_rag.retrieval.embed import BgeM3Embedder, Embedder
+from apt_rag.retrieval.evaluate import evaluate_csv
+from apt_rag.ingest.extract import extract_pdf, write_extracted_md, write_pages_json
+from apt_rag.generation.llm import LLM, get_llm
 from apt_rag.models import AnswerResult, Chunk, ChatTurn, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
-from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
-from apt_rag.pdfinspect import inspect_pdf_file
-from apt_rag.qgen import generate, load_chunks
-from apt_rag.search import Searcher
-from apt_rag.store import write_index
-from apt_rag.validate import render_report_md, validate
+from apt_rag.ingest.ocr import OcrUnavailableError, get_ocr_engine
+from apt_rag.ingest.pdfinspect import inspect_pdf_file
+from apt_rag.generation.qgen import generate, load_chunks
+from apt_rag.retrieval.search import Searcher
+from apt_rag.retrieval.store import write_index
+from apt_rag.ingest.validate import render_report_md, validate
 
 
 def inspect_pdf(pdf: Path, settings: Settings) -> InspectReport:

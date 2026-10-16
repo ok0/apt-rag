@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from apt_rag.extract import (
+from apt_rag.ingest.extract import (
     ADDENDA_RE,
     ARTICLE_HEAD_RE,
     CHAPTER_RE,

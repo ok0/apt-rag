@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from apt_rag.bm25 import tokenize
-from apt_rag.synonyms import Synonyms, load_synonyms, parse_synonyms
+from apt_rag.retrieval.bm25 import tokenize
+from apt_rag.retrieval.synonyms import Synonyms, load_synonyms, parse_synonyms
 
 
 def test_parse_skips_comments_and_blank_lines():

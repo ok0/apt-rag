@@ -5,7 +5,7 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from apt_rag.llm import LLM, LLMError
+from apt_rag.generation.llm import LLM, LLMError
 from apt_rag.models import ChatTurn, SearchHit, page_range
 
 DISCLAIMER = "※ 이 답변은 참고용이며, 최종 해석은 관리사무소에 확인하세요."

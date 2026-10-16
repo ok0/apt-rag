@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from apt_rag.llm import (
+from apt_rag.generation.llm import (
     LLMError,
     OllamaClient,
     OllamaConnectionError,

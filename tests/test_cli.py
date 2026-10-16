@@ -1,11 +1,11 @@
 import pytest
 
 import apt_rag.cli as cli
-from apt_rag.answer import DISCLAIMER, NO_HIT_ANSWER
+from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER
 from apt_rag.cli import main
-from apt_rag.llm import OllamaConnectionError
+from apt_rag.generation.llm import OllamaConnectionError
 from apt_rag.models import AnswerResult, ChatTurn, SearchHit
-from apt_rag.store import IndexMismatchError
+from apt_rag.retrieval.store import IndexMismatchError
 
 
 def test_help_exits_zero():

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from apt_rag.bm25 import BM25Index, tokenize
+from apt_rag.retrieval.bm25 import BM25Index, tokenize
 from apt_rag.config import Settings
-from apt_rag.embed import BgeM3Embedder, Embedder
+from apt_rag.retrieval.embed import BgeM3Embedder, Embedder
 from apt_rag.models import Chunk, SearchHit
-from apt_rag.synonyms import Synonyms, load_synonyms
-from apt_rag.store import IndexMismatchError, load_index
+from apt_rag.retrieval.synonyms import Synonyms, load_synonyms
+from apt_rag.retrieval.store import IndexMismatchError, load_index
 
 if TYPE_CHECKING:
     from chromadb.api.models.Collection import Collection
