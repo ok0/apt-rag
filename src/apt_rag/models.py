@@ -175,6 +175,7 @@ class AskEvalResult:
     total: int
     counts: dict[str, int]
     rows: list[AskEvalRow]
+    model: str = ""
 
 
 @dataclass

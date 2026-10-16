@@ -1,3 +1,4 @@
+import dataclasses
 import json
 
 import pytest
@@ -151,3 +152,24 @@ def test_evaluate_answers_keeps_partial_on_failure(settings, tmp_path):
     lines = partials[0].read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert json.loads(lines[0])["question"] == "반려견 목줄은 필요한가요"
+
+
+def test_evaluate_answers_names_result_file_with_model(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+        }
+    )
+    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    model_settings = dataclasses.replace(settings, llm_model="hf.co/foo:bar")
+    result = evaluate_answers(csv_path, model_settings, k=5, searcher=searcher, llm=llm)
+
+    final_files = list((settings.work_dir / "eval").glob("ask-eval-*.json"))
+    assert len(final_files) == 1
+    name = final_files[0].name
+    assert name.startswith("ask-eval-hf.co_foo_bar-")
+    assert ":" not in name and "/" not in name
+    assert json.loads(final_files[0].read_text(encoding="utf-8"))["model"] == "hf.co/foo:bar"
+    assert result.model == "hf.co/foo:bar"

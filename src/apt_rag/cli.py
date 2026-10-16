@@ -5,7 +5,6 @@ import dataclasses
 import json
 import sys
 from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
 
 from apt_rag import __version__
@@ -16,7 +15,7 @@ from apt_rag.generation.llm import LLMError
 from apt_rag.models import AskEvalRow, Chunk, page_range
 from apt_rag.generation.qgen import split_parts
 from apt_rag.retrieval.search import Searcher
-from apt_rag.service import ASK_EVAL_CATEGORIES, answer, build_index, evaluate, evaluate_answers, generate_questions, inspect_pdf
+from apt_rag.service import ASK_EVAL_CATEGORIES, answer, build_index, evaluate, evaluate_answers, generate_questions, inspect_pdf, new_ask_eval_partial_path
 from apt_rag.retrieval.store import IndexMismatchError
 
 
@@ -244,8 +243,7 @@ def _cmd_eval_ask(args: argparse.Namespace) -> int:
         print(f"파일을 찾을 수 없습니다: {csv_path}", file=sys.stderr)
         return 1
     settings = _with_band_overrides(load_settings(), args)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    partial_path = settings.work_dir / "eval" / f"ask-eval-{stamp}.partial.jsonl"
+    partial_path = new_ask_eval_partial_path(settings)
 
     def progress(index: int, total: int, row: AskEvalRow) -> None:
         print(f"[{index}/{total}] {row.category} · {row.question[:40]}", file=sys.stderr, flush=True)
@@ -271,7 +269,7 @@ def _cmd_eval_ask(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
         return 0
-    print(f"분류별 건수 (k={result.k}, 총 {result.total}문항):")
+    print(f"분류별 건수 (model={result.model}, k={result.k}, 총 {result.total}문항):")
     for category in ASK_EVAL_CATEGORIES:
         print(f"- {category}: {result.counts[category]}")
     for row in result.rows:

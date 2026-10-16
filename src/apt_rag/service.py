@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import re
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -252,6 +253,15 @@ ASK_EVAL_CATEGORIES = (
 )
 
 
+def safe_model_name(model: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", model)
+
+
+def new_ask_eval_partial_path(settings: Settings) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return settings.work_dir / "eval" / f"ask-eval-{safe_model_name(settings.llm_model)}-{stamp}.partial.jsonl"
+
+
 def evaluate_answers(
     csv_path: Path,
     settings: Settings,
@@ -270,8 +280,7 @@ def evaluate_answers(
     out_dir = settings.work_dir / "eval"
     out_dir.mkdir(parents=True, exist_ok=True)
     if partial_path is None:
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        partial_path = out_dir / f"ask-eval-{stamp}.partial.jsonl"
+        partial_path = new_ask_eval_partial_path(settings)
     final_path = partial_path.with_name(partial_path.name.removesuffix(".partial.jsonl") + ".json")
     rows: list[AskEvalRow] = []
     with partial_path.open("w", encoding="utf-8") as partial:
@@ -319,7 +328,7 @@ def evaluate_answers(
     counts = {name: 0 for name in ASK_EVAL_CATEGORIES}
     for row in rows:
         counts[row.category] += 1
-    result = AskEvalResult(k=k, total=len(rows), counts=counts, rows=rows)
+    result = AskEvalResult(model=settings.llm_model, k=k, total=len(rows), counts=counts, rows=rows)
     final_path.write_text(json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8")
     partial_path.unlink()
     return result
