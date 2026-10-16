@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from apt_rag.generation.llm import LLM, LLMError
@@ -176,3 +177,66 @@ def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], 
         if index in cited_hits and hit.article_ref not in cited:
             cited.append(hit.article_ref)
     return cited, unverified
+
+
+MIN_EVIDENCE_CHARS = 8
+_NORM_DROP = re.compile(r"[^0-9A-Za-z가-힣㐀-䶿一-鿿]")
+_SEG_SPLIT = re.compile(r"\n+|…|\.{3,}|(?<=\.)\s+")
+_LEAD_REF = re.compile(r"^\s*[(\[]?\s*(?:별표\s*\d+|별지\s*제\s*\d+(?:-\d+)?\s*호\s*서식|(?:별첨\s*\d+\s*|부칙\s*)?제\s*\d+\s*조(?:\s*의\s*\d+)?(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?)\s*[)\]]?\s*[:：]?\s*")
+_TRAIL_REF = re.compile(r"\s*\((?:별표|별지|별첨|부칙|제\s*\d)[^)]*\)\s*\.?\s*$")
+
+
+@dataclass
+class AnswerDraft:
+    answerable: bool
+    evidence: str
+    answer: str
+
+
+def parse_answer_json(raw: str) -> AnswerDraft | None:
+    s = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    start = s.find("{")
+    end = s.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return None
+    try:
+        data = json.loads(s[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    answerable = data.get("answerable")
+    if not isinstance(answerable, bool):
+        return None
+    evidence = data.get("evidence") or ""
+    answer = data.get("answer") or ""
+    if not isinstance(evidence, str) or not isinstance(answer, str):
+        return None
+    if answerable and not answer.strip():
+        return None
+    return AnswerDraft(answerable, evidence.strip(), answer.strip())
+
+
+def normalize_for_match(s: str) -> str:
+    return _NORM_DROP.sub("", s).lower()
+
+
+def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None:
+    normed = [normalize_for_match(h.text) for h in hits]
+    segs = []
+    for raw in _SEG_SPLIT.split(evidence):
+        seg = _TRAIL_REF.sub("", _LEAD_REF.sub("", raw))
+        n = normalize_for_match(seg)
+        if len(n) >= MIN_EVIDENCE_CHARS:
+            segs.append(n)
+    if not segs:
+        return None
+    matched: list[int] = []
+    for n in segs:
+        idx = [i for i, h in enumerate(normed) if n in h]
+        if not idx:
+            return None
+        for i in idx:
+            if i not in matched:
+                matched.append(i)
+    return sorted(matched)

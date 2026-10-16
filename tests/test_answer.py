@@ -11,6 +11,8 @@ from apt_rag.generation.answer import (
     REWRITE_SYSTEM_PROMPT,
     check_citations,
     load_history,
+    match_evidence,
+    parse_answer_json,
     parse_history,
     pure_refusal_text,
 )
@@ -308,3 +310,89 @@ def test_result_is_json_serializable(settings):
         llm=llm,
     )
     assert json.dumps(asdict(result), ensure_ascii=False)
+
+
+def test_parse_answer_json_valid():
+    draft = parse_answer_json('{"answerable": true, "evidence": "본문", "answer": "답 (제1조)"}')
+    assert draft is not None
+    assert draft.answerable is True
+    assert draft.evidence == "본문"
+    assert draft.answer == "답 (제1조)"
+
+
+def test_parse_answer_json_fence():
+    raw = '```json\n{"answerable": false, "evidence": "", "answer": "찾지 못함"}\n```'
+    draft = parse_answer_json(raw)
+    assert draft is not None
+    assert draft.answerable is False
+
+
+def test_parse_answer_json_surrounding_text():
+    raw = '여기 답입니다: {"answerable": false, "evidence": "", "answer": "x"} 끝'
+    draft = parse_answer_json(raw)
+    assert draft is not None
+    assert draft.answer == "x"
+
+
+def test_parse_answer_json_broken_returns_none():
+    assert parse_answer_json('{"answerable": true, "evidence": "a", "answer": ') is None
+    assert parse_answer_json("그냥 텍스트") is None
+
+
+def test_parse_answer_json_answerable_not_bool_returns_none():
+    assert parse_answer_json('{"answerable": "true", "evidence": "", "answer": "답"}') is None
+
+
+def test_parse_answer_json_true_with_empty_answer_returns_none():
+    assert parse_answer_json('{"answerable": true, "evidence": "본문 조항 내용", "answer": "  "}') is None
+
+
+def test_match_evidence_absorbs_format_differences():
+    hit = make_hit(1, "제5조", text="| 연 체 개 월 | 값 |\n|---|---|\n① 입주자는 \"반려동물\"을 키울 수 있다.")
+    assert match_evidence("입주자는 반려동물을 키울 수 있다", [hit]) == [0]
+    assert match_evidence("① 입주자는 '반려동물'을 키울 수 있다.", [hit]) == [0]
+
+
+def test_match_evidence_strips_leading_and_trailing_labels():
+    hits = [
+        make_hit(1, "제98조제2항", text="입주자등은 오후 10시부터 다음날 오전 6시까지 소음을 발생시키지 아니한다."),
+        make_hit(2, "제903조제1항", text="관리주체는 자전거를 처분할 수 있다 이 경우 공고가 필요하다"),
+    ]
+    assert match_evidence("(제98조제2항) 입주자등은 오후 10시부터 다음날 오전 6시까지", hits) == [0]
+    assert match_evidence("관리주체는 자전거를 처분할 수 있다 (제903조제1항)", hits) == [1]
+
+
+def test_match_evidence_rewritten_sentence_returns_none():
+    hit = make_hit(1, "제5조", text="입주자는 반려동물을 키울 수 있다.")
+    assert match_evidence("입주자는 반려동물을 기를 수 있다.", [hit]) is None
+
+
+def test_match_evidence_short_evidence_returns_none():
+    hit = make_hit(1, "제5조", text="입주자는 반려동물을 키울 수 있다.")
+    assert match_evidence("반려동물", [hit]) is None
+
+
+def test_match_evidence_one_segment_mismatch_returns_none():
+    hit = make_hit(1, "제5조", text="입주자는 반려동물을 키울 수 있다.")
+    evidence = "입주자는 반려동물을 키울 수 있다.\n관리주체는 전혀 다른 내용을 말한다."
+    assert match_evidence(evidence, [hit]) is None
+
+
+def test_match_evidence_table_example():
+    hit = make_hit(
+        1,
+        "제6조",
+        text="| 연 체 개 월 | 1개월 이하 |\n|---|---|\n※ 연체 요율은 연체 기간이 1개월(30일) 이하인 경우 5% 적용하고",
+    )
+    evidence = "※ 연체 요율은 연체 기간이 1개월(30일) 이하인 경우 5% 적용하고"
+    assert match_evidence(evidence, [hit]) == [0]
+
+
+def test_match_evidence_returns_matched_indices():
+    hits = [
+        make_hit(1, "제1조", text="첫 번째 조항의 내용입니다."),
+        make_hit(2, "제2조", text="두 번째 조항의 다른 내용입니다."),
+        make_hit(3, "제3조", text="세 번째 조항의 내용입니다."),
+    ]
+    evidence = "첫 번째 조항의 내용입니다.\n세 번째 조항의 내용입니다."
+    assert match_evidence(evidence, hits) == [0, 2]
