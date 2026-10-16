@@ -128,6 +128,25 @@ def test_article_number_question_is_dropped(tmp_path):
     assert [q.question for q in result.questions] == ["관리비 늦게 내면 이자가 붙나요?"]
 
 
+def test_non_korean_script_question_is_dropped(tmp_path):
+    chunks = [make_chunk(1, "제84조")]
+    client = FakeLLM(
+        {
+            "제84조": json.dumps(
+                {
+                    "questions": [
+                        "어린이집을 임대할 때是如何通过全体住户过半数的同意来操作？",
+                        "어린이집 임대는 입주자 동의가 필요한가요?",
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        }
+    )
+    result = generate(chunks, out=tmp_path / "q.csv", llm=client)
+    assert [q.question for q in result.questions] == ["어린이집 임대는 입주자 동의가 필요한가요?"]
+
+
 def test_duplicate_questions_removed(tmp_path):
     chunks = [make_chunk(1, "제5조"), make_chunk(2, "제6조")]
     same = json.dumps({"questions": ["반려동물을 키워도 되나요?"]}, ensure_ascii=False)

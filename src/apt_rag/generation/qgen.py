@@ -20,6 +20,7 @@ TOKENS_PER_QUESTION = 160
 CSV_HEADER = ["question", "expected_article", "source_title", "source_pages"]
 _LEADING_MARK = re.compile(r"^\s*(?:\d+\s*[.)]|[-*•])\s*")
 _ARTICLE_NO = re.compile(r"제\s*\d+\s*조")
+_FOREIGN_SCRIPT = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]")
 
 SYSTEM_PROMPT = (
     "당신은 아파트 관리규약 조항을 읽고 입주민 질문을 만드는 도우미입니다.\n"
@@ -29,6 +30,7 @@ SYSTEM_PROMPT = (
     "- '제N조' 같은 조 번호와 조 제목의 단어를 그대로 쓰지 말고, 일상어로 바꿔 말하세요.\n"
     "- 규약에 없는 내용을 묻거나 추측하지 마세요.\n"
     "- 질문은 한 줄짜리 문장으로 만드세요.\n"
+    "- 반드시 한국어로만 쓰세요. 한자, 중국어, 일본어는 한 글자도 섞지 마세요.\n"
     "- 설명 없이 JSON만 출력하세요. 형식: {\"questions\": [\"질문1\", \"질문2\"]}"
 )
 
@@ -98,6 +100,8 @@ def clean_question(raw: str) -> str:
 
 def is_valid_question(question: str) -> bool:
     if not MIN_QUESTION_CHARS <= len(question) <= MAX_QUESTION_CHARS:
+        return False
+    if _FOREIGN_SCRIPT.search(question):
         return False
     return _ARTICLE_NO.search(question) is None
 
