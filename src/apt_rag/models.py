@@ -137,6 +137,7 @@ class SearchHit:
     chunk_id: str
     text: str
     via_band: bool = False
+    via_ref: bool = False
 
 
 @dataclass

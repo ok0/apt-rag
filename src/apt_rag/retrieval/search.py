@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import re
 from typing import TYPE_CHECKING
 
 from apt_rag.retrieval.bm25 import BM25Index, tokenize
@@ -14,6 +16,30 @@ if TYPE_CHECKING:
 
 RRF_K = 60
 CANDIDATES = 50
+CONTEXT_ARTICLE_CHARS = 2000
+CONTEXT_TOTAL_CHARS = 12000
+CONTEXT_MAX_REFS = 2
+_REF_APPX = re.compile(r"별표\s*(\d+)")
+_REF_ART = re.compile(r"제(\d+)조(?:의(\d+))?")
+_LAW_CONTEXT_CHARS = "법령칙」"
+
+
+def _is_law_ref(text: str, start: int) -> bool:
+    j = start - 1
+    while j >= 0 and text[j].isspace():
+        j -= 1
+    return j >= 0 and text[j] in _LAW_CONTEXT_CHARS
+
+
+def _context_text(group: list[Chunk], chunk_id: str) -> str:
+    full = "\n".join(c.text for c in group)
+    if len(full) <= CONTEXT_ARTICLE_CHARS:
+        return full
+    text = group[0].text
+    if chunk_id != group[0].chunk_id:
+        matched = next(c for c in group if c.chunk_id == chunk_id)
+        text += "\n…\n" + matched.text
+    return text
 
 
 def rrf(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
@@ -32,6 +58,7 @@ class Searcher:
         self._embedder = embedder
         self._synonyms = synonyms
         self._loaded: tuple[Collection, dict[str, Chunk], BM25Index] | None = None
+        self._by_ref: dict[str, list[Chunk]] | None = None
 
     def _ensure(self) -> tuple[Collection, dict[str, Chunk], BM25Index]:
         if self._loaded is None:
@@ -116,3 +143,67 @@ class Searcher:
             if len(hits) >= top_n:
                 break
         return hits
+
+    def _chunks_by_ref(self) -> dict[str, list[Chunk]]:
+        if self._by_ref is None:
+            _, chunks, _ = self._ensure()
+            by_ref: dict[str, list[Chunk]] = {}
+            for chunk in chunks.values():
+                by_ref.setdefault(chunk.article_ref, []).append(chunk)
+            for group in by_ref.values():
+                group.sort(key=lambda c: c.seq)
+            self._by_ref = by_ref
+        return self._by_ref
+
+    def expand_context(self, hits: list[SearchHit]) -> list[SearchHit]:
+        by_ref = self._chunks_by_ref()
+        result: list[SearchHit] = []
+        for hit in hits:
+            group = by_ref[hit.article_ref]
+            result.append(dataclasses.replace(hit, text=_context_text(group, hit.chunk_id)))
+        total = sum(len(h.text) for h in result)
+        if total > CONTEXT_TOTAL_CHARS:
+            return result
+        present = {h.article_ref for h in hits}
+        appx: list[str] = []
+        art: list[str] = []
+        for hit in result:
+            for m in _REF_APPX.finditer(hit.text):
+                if not _is_law_ref(hit.text, m.start()):
+                    appx.append(f"별표 {m.group(1)}")
+            if hit.part in ("본문", "별표"):
+                for m in _REF_ART.finditer(hit.text):
+                    if not _is_law_ref(hit.text, m.start()):
+                        ref = f"제{m.group(1)}조" + (f"의{m.group(2)}" if m.group(2) else "")
+                        art.append(ref)
+        candidates: list[str] = []
+        for ref in appx + art:
+            if ref in by_ref and ref not in present and ref not in candidates:
+                candidates.append(ref)
+        for ref in candidates[:CONTEXT_MAX_REFS]:
+            group = by_ref[ref]
+            body = _context_text(group, group[0].chunk_id)
+            if total + len(body) > CONTEXT_TOTAL_CHARS:
+                break
+            total += len(body)
+            first = group[0]
+            result.append(
+                SearchHit(
+                    rank=len(result) + 1,
+                    article_ref=first.article_ref,
+                    part=first.part,
+                    title=first.title,
+                    header=first.header,
+                    chapter=first.chapter,
+                    page_start=first.page_start,
+                    page_end=first.page_end,
+                    score=0.0,
+                    vec_rank=None,
+                    bm25_rank=None,
+                    vec_sim=None,
+                    chunk_id=first.chunk_id,
+                    text=body,
+                    via_ref=True,
+                )
+            )
+        return result

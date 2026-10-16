@@ -303,3 +303,21 @@ def test_min_sim_zero_ignores_band(settings):
     assert all(h.via_band is False for h in hits)
     top = next(h for h in hits if h.article_ref == "제93조")
     assert top.vec_rank == 1
+
+
+def test_expand_context_adds_referenced_appendix(settings, hash_embedder):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제5조", "입주자는 반려동물을 사육할 수 있으며 [별표 1] 기준을 따른다."),
+        dataclasses.replace(make_chunk(2, "별표 1", "관리대상물 목록 표"), part="별표"),
+    ]
+    build(settings, hash_embedder, chunks)
+    searcher = Searcher(settings, hash_embedder)
+    hits = searcher.search("반려동물 사육", 1, min_sim=0)
+    assert [h.article_ref for h in hits] == ["제5조"]
+    expanded = searcher.expand_context(hits)
+    appendix = [h for h in expanded if h.article_ref == "별표 1"]
+    assert len(appendix) == 1
+    assert appendix[0].via_ref is True
+    assert appendix[0].text == "관리대상물 목록 표"
+    assert expanded[0].via_ref is False
