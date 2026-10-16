@@ -42,6 +42,9 @@ class FakeSearcher:
         self.queries.append(query)
         return self.hits_by_query.get(query, [])[:top_n]
 
+    def expand_context(self, hits):
+        return list(hits)
+
 
 def write_csv(path):
     path.write_text(

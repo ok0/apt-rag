@@ -57,6 +57,9 @@ class FakeSearcher:
         self.queries.append(query)
         return self.hits[:top_n]
 
+    def expand_context(self, hits):
+        return list(hits)
+
 
 def test_no_hits_skips_llm(settings):
     llm = FakeLLM([])

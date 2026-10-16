@@ -202,16 +202,17 @@ def answer(
             unverified_refs=[],
             llm=used.name if used else None,
         )
+    context = searcher.expand_context(hits)
     used = used or llm or get_llm(settings)
-    text = generate_answer(used, query, hits)
-    cited, unverified = check_citations(text, hits)
+    text = generate_answer(used, query, context)
+    cited, unverified = check_citations(text, context)
     return AnswerResult(
         question=question,
         search_query=query,
         rewritten_question=rewritten,
         answer=text,
         disclaimer=DISCLAIMER,
-        hits=list(hits),
+        hits=list(context),
         cited_refs=cited,
         unverified_refs=unverified,
         llm=used.name,

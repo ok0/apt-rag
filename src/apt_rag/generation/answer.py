@@ -107,8 +107,9 @@ def build_answer_messages(question: str, hits: Sequence[SearchHit]) -> list[dict
     blocks = []
     for hit in hits:
         location = " · ".join([hit.part] + ([hit.chapter] if hit.chapter else []) + [page_range(hit.page_start, hit.page_end)])
+        ref_attr = ' 참조="예"' if hit.via_ref else ""
         blocks.append(
-            f'<조항 번호="{_attr(hit.article_ref)}" 제목="{_attr(hit.title)}" 위치="{_attr(location)}">\n'
+            f'<조항 번호="{_attr(hit.article_ref)}" 제목="{_attr(hit.title)}" 위치="{_attr(location)}"{ref_attr}>\n'
             f"{_escape(hit.text)}\n"
             "</조항>"
         )

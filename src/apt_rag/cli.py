@@ -323,6 +323,7 @@ def _cmd_ask(args: argparse.Namespace) -> int:
             print(
                 f"- {h.article_ref} {h.title} ({page_range(h.page_start, h.page_end)})"
                 + (" [인용]" if h.article_ref in result.cited_refs else "")
+                + (" (참조로 추가)" if h.via_ref else "")
             )
     if result.unverified_refs:
         print(
