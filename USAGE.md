@@ -21,6 +21,7 @@ uv run apt-rag inspect <pdf> [--json]
 uv run apt-rag index <pdf> [--no-embed] [--strict]
 uv run apt-rag search <query> [--top-n 5] [--excerpt 160] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
 uv run apt-rag eval <csv> [-k 5] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
+uv run apt-rag eval-ask <csv> [-k 5] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
 uv run apt-rag ask <question> [--history FILE] [--top-n 5] [--json] [--min-sim 0.55] [--sim-band 0.05] [--band-top-k 20]
 uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generated_questions.csv] [--model M] [--seed 42] [--parts 본문] [--min-chars 80] [--force]
 ```
@@ -30,6 +31,17 @@ uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generate
 - `search`: 색인에서 질의에 맞는 조항을 검색합니다. 결과의 `vec #N sim=0.xx`는 벡터 코사인 유사도입니다. `--min-sim`(기본 0.55, `APT_RAG_MIN_VEC_SIM`으로 변경 가능)보다 낮은 벡터 후보는 버리며, `0`이면 컷오프를 끕니다. 벡터 후보가 하나도 기준을 넘지 못하면 완화 구간(`--sim-band`, `--band-top-k`, 아래 절 참고)을 적용합니다. 구간에 드는 조항만 결과로 살리며, 이때 결과 항목은 `구간통과`로 표시되고 안내문이 함께 출력됩니다(`--json`에서는 `via_band: true`). 살릴 조항이 없으면 결과를 비워 `관련 조항을 찾지 못했습니다.`를 출력합니다. 벡터 후보가 하나라도 남으면 BM25와 RRF로 융합합니다. `0`이면 이 규칙도 함께 꺼지고 BM25 단독 결과도 나옵니다.
 - `ask`: 검색된 조항을 근거로 LLM이 답변합니다. 자세한 내용은 아래 '답변 생성 (ask)' 절을 참고하세요.
 - `eval`: 질문 CSV로 hit@k 검색 적중률을 측정합니다. 컷오프로 결과가 비면 실패로 집계합니다. CSV는 UTF-8이며 `question,expected_article` 컬럼이 필요합니다. 정답 조문이 여러 개면 `;`로 구분하며, 상위 k개 중 하나라도 맞으면 적중입니다. 샘플은 `eval/sample_questions.csv`(15문항)이고, 실제 평가용 30~50문항은 같은 형식으로 작성합니다.
+- `eval-ask`: 질문마다 `ask`와 같은 답변을 만든 뒤, 검색과 생성 중 어디서 실패했는지 분류합니다. 입력 CSV는 `eval`과 같습니다. 정답이 빈 행은 "규약에 없는 질문"으로 취급합니다. 분류는 아래 표 순서로 판정하며, 첫 줄 건수 요약과 함께 `cited`, `unanswerable_refused`가 아닌 문항만 목록으로 출력합니다.
+
+| 분류 | 의미 |
+|---|---|
+| `cited` | 정답 조항을 답변이 인용함 |
+| `retrieved_not_cited` | 정답 조항이 검색 결과에 있었으나 답변이 인용하지 않음 |
+| `rank_beyond_k` | 정답 조항이 컷오프 없이 검색했을 때도 k위 밖임 |
+| `cut_by_min_sim` | 정답 조항이 k위 안에 들지만 컷오프에 걸려 검색 결과에서 빠짐 |
+| `not_in_candidates` | 컷오프 없이도 정답 조항이 검색 후보 50위 안에 없음 |
+| `unanswerable_refused` | 정답이 없는 질문에 답변이 "찾지 못했습니다"로 거절함 |
+| `unanswerable_answered` | 정답이 없는 질문에 답변이 내용을 답함 |
 
 ### 컷오프 기본값 실측 (`APT_RAG_MIN_VEC_SIM`, 기본 0.55)
 
