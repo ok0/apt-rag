@@ -34,6 +34,22 @@ def test_table_page_produces_markdown(tmp_path):
     assert any("| 비목 | 산정방법 |" in line.text for line in table_lines)
 
 
+def test_table_inserted_after_preceding_title_not_footer(tmp_path):
+    pdf = make_pdf(
+        tmp_path / "t.pdf",
+        [["[별표 1] 관리대상물(제4조 관련)"]],
+        page_numbers=False,
+        footers={0: "-1-"},
+        tables={0: [["구분", "내용"], ["전기", "수전설비"]]},
+    )
+    report = inspect_pdf_file(pdf)
+    result = extract_pdf(pdf, report, NullOcr())
+    texts = [line.text for line in result.lines]
+    title_idx = next(i for i, t in enumerate(texts) if t.startswith("[별표 1]"))
+    table_idx = next(i for i, line in enumerate(result.lines) if line.kind == "table")
+    assert title_idx < table_idx
+
+
 def test_image_page_without_ocr_raises(tmp_path, settings):
     pdf = make_pdf(
         tmp_path / "image.pdf",

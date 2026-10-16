@@ -125,11 +125,10 @@ def _page_entries(page: pymupdf.Page, pno: int, kind: str, ocr: OcrEngine) -> tu
     for tab in tabs:
         box = tuple(tab.bbox)
         md = table_to_markdown(tab.extract())
-        insert_at = len(kept)
+        insert_at = 0
         for idx, entry in enumerate(kept):
-            if entry[0] == "text" and entry[2].y0 > box[1]:
-                insert_at = idx
-                break
+            if entry[0] == "text" and entry[2].y1 <= box[1] + 1:
+                insert_at = idx + 1
         kept.insert(insert_at, ("table", md, None))
     return kept, len(tabs)
 

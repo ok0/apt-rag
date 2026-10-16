@@ -15,14 +15,18 @@ def make_pdf(
     page_numbers: bool = True,
     tables: dict[int, list[list[str]]] | None = None,
     image_pages: set[int] = frozenset(),
+    footers: dict[int, str] | None = None,
 ) -> Path:
     path = Path(path)
     tables = tables or {}
+    footers = footers or {}
     doc = pymupdf.open()
     font = pymupdf.Font("cjk")
     for i, lines in enumerate(pages):
         page = doc.new_page(width=PAGE_W, height=PAGE_H)
         tw = pymupdf.TextWriter(page.rect)
+        if i in footers:
+            tw.append((72, PAGE_H - 40), footers[i], font=font, fontsize=10)
         if page_numbers:
             tw.append((72, 40), f"-{i + 1}-", font=font, fontsize=10)
         y = 72
