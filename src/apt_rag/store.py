@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import chromadb
 import chromadb.config
@@ -12,6 +13,10 @@ from apt_rag.bm25 import BM25Index
 from apt_rag.config import Settings
 from apt_rag.models import Chunk
 
+if TYPE_CHECKING:
+    from chromadb.api import ClientAPI
+    from chromadb.api.models.Collection import Collection
+
 class IndexMismatchError(RuntimeError):
     pass
 
@@ -19,7 +24,7 @@ class IndexMismatchError(RuntimeError):
 BATCH = 256
 
 
-def _client(settings: Settings):
+def _client(settings: Settings) -> ClientAPI:
     return chromadb.PersistentClient(
         path=str(settings.chroma_dir),
         settings=chromadb.config.Settings(anonymized_telemetry=False),
@@ -74,7 +79,7 @@ def write_index(settings: Settings, chunks: list[Chunk], vectors: list[list[floa
     )
 
 
-def load_index(settings: Settings):
+def load_index(settings: Settings) -> tuple[Collection, dict[str, Chunk], BM25Index, dict]:
     index_dir = settings.index_dir
     manifest_path = index_dir / "manifest.json"
     if not manifest_path.exists():

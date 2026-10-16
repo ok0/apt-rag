@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from apt_rag.bm25 import BM25Index, tokenize
 from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder, Embedder
 from apt_rag.models import Chunk, SearchHit
 from apt_rag.synonyms import Synonyms, load_synonyms
 from apt_rag.store import IndexMismatchError, load_index
+
+if TYPE_CHECKING:
+    from chromadb.api.models.Collection import Collection
 
 RRF_K = 60
 CANDIDATES = 50
@@ -26,9 +31,9 @@ class Searcher:
         self._settings = settings
         self._embedder = embedder
         self._synonyms = synonyms
-        self._loaded = None
+        self._loaded: tuple[Collection, dict[str, Chunk], BM25Index] | None = None
 
-    def _ensure(self):
+    def _ensure(self) -> tuple[Collection, dict[str, Chunk], BM25Index]:
         if self._loaded is None:
             collection, chunks, bm25, manifest = load_index(self._settings)
             if self._synonyms is None:

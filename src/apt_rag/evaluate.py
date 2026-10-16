@@ -4,8 +4,12 @@ import csv
 import re
 import unicodedata
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from apt_rag.models import EvalFailure, EvalResult
+
+if TYPE_CHECKING:
+    from apt_rag.search import Searcher
 
 
 def normalize_ref(s: str) -> str:
@@ -21,13 +25,13 @@ def parse_expected(cell: str) -> list[str]:
     return [normalize_ref(piece) for piece in _split_cell(cell)]
 
 
-def load_questions(csv_path: Path) -> list[tuple[str, list[str]]]:
+def load_questions(csv_path: Path) -> list[tuple[str, str]]:
     with open(csv_path, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         fields = reader.fieldnames or []
         if "question" not in fields or "expected_article" not in fields:
             raise ValueError("CSV에 question, expected_article 컬럼이 필요합니다")
-        rows = []
+        rows: list[tuple[str, str]] = []
         for row in reader:
             question = (row.get("question") or "").strip()
             if not question:
@@ -36,7 +40,7 @@ def load_questions(csv_path: Path) -> list[tuple[str, list[str]]]:
     return [(q, cell) for q, cell in rows]
 
 
-def evaluate_csv(csv_path: Path, searcher, k: int = 5, min_sim: float | None = None) -> EvalResult:
+def evaluate_csv(csv_path: Path, searcher: Searcher, k: int = 5, min_sim: float | None = None) -> EvalResult:
     questions = load_questions(Path(csv_path))
     total = len(questions)
     hits = 0

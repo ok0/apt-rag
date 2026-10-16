@@ -60,7 +60,7 @@ def select_chunks(
     by_chapter: dict[str, list[Chunk]] = {}
     for chunk in first_by_ref.values():
         by_chapter.setdefault(chunk.chapter, []).append(chunk)
-    queues = []
+    queues: list[list[Chunk]] = []
     for members in by_chapter.values():
         rng.shuffle(members)
         queues.append(members)

@@ -11,7 +11,7 @@ from pathlib import Path
 from apt_rag.answer import DISCLAIMER, NO_HIT_ANSWER, check_citations, generate_answer, rewrite_question
 from apt_rag.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
-from apt_rag.embed import BgeM3Embedder
+from apt_rag.embed import BgeM3Embedder, Embedder
 from apt_rag.evaluate import evaluate_csv
 from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
 from apt_rag.llm import LLM, get_llm
@@ -117,7 +117,7 @@ def build_index(
     *,
     no_embed: bool = False,
     strict: bool = False,
-    embedder: object | None = None,
+    embedder: Embedder | None = None,
 ) -> IndexResult:
     prep = prepare(pdf, settings)
     if strict and prep.report.has_errors:

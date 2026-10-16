@@ -9,10 +9,10 @@ from pathlib import Path
 
 from apt_rag import __version__
 from apt_rag.answer import load_history
-from apt_rag.config import load_settings
+from apt_rag.config import Settings, load_settings
 from apt_rag.ocr import OcrUnavailableError
 from apt_rag.llm import LLMError
-from apt_rag.models import page_range
+from apt_rag.models import Chunk, page_range
 from apt_rag.qgen import split_parts
 from apt_rag.search import Searcher
 from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
@@ -104,7 +104,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _with_band_overrides(settings, args: argparse.Namespace):
+def _with_band_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     overrides = {}
     if args.sim_band is not None:
         overrides["sim_band"] = args.sim_band
@@ -232,7 +232,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 def _cmd_gen_questions(args: argparse.Namespace) -> int:
     settings = load_settings()
 
-    def progress(index: int, total: int, chunk, produced: int | None) -> None:
+    def progress(index: int, total: int, chunk: Chunk, produced: int | None) -> None:
         label = f"{chunk.article_ref} {chunk.title}"
         if produced is None:
             print(f"[{index}/{total}] {label} -> 건너뜀 (유효한 질문 없음)")
