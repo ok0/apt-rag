@@ -3,11 +3,12 @@ import json
 
 import pytest
 
+from apt_rag.generation.answer import NOT_FOUND_ANSWER
 from apt_rag.models import SearchHit
 from apt_rag.service import ASK_EVAL_CATEGORIES, evaluate_answers
 
 
-def make_hit(rank, ref, text="본문"):
+def make_hit(rank, ref, text="본문 조항의 내용을 여기에 적습니다"):
     return SearchHit(
         rank=rank,
         article_ref=ref,
@@ -26,6 +27,10 @@ def make_hit(rank, ref, text="본문"):
     )
 
 
+def reply(answer, evidence="본문 조항의 내용을 여기에 적습니다", answerable=True):
+    return json.dumps({"answerable": answerable, "evidence": evidence, "answer": answer}, ensure_ascii=False)
+
+
 class FakeLLM:
     name = "fake"
 
@@ -33,7 +38,7 @@ class FakeLLM:
         self.replies = list(replies)
         self.calls = []
 
-    def complete(self, system, messages, *, temperature=0.0, max_tokens=1024):
+    def complete(self, system, messages, **kwargs):
         self.calls.append({"system": system, "messages": messages})
         return self.replies.pop(0)
 
@@ -70,7 +75,7 @@ def test_evaluate_answers_classifies_rows(settings, tmp_path):
             "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
         }
     )
-    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    llm = FakeLLM([reply("목줄을 해야 합니다 (제23조)"), reply(NOT_FOUND_ANSWER, evidence="", answerable=False)])
     result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
 
     assert result.k == 5
@@ -102,9 +107,9 @@ def test_evaluate_answers_mixed_refusal_is_answered(settings, tmp_path):
     )
     llm = FakeLLM(
         [
-            "목줄을 해야 합니다 (제23조)",
-            "점검 주기는 조항에 있습니다",
-            "관리사무소가 택배 분실을 배상해 주지 않습니다. (관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요.)",
+            reply("목줄을 해야 합니다 (제23조)"),
+            reply(NOT_FOUND_ANSWER, evidence="", answerable=False),
+            reply("관리사무소가 택배 분실을 배상해 주지 않습니다. (관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요.)"),
         ]
     )
     result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
@@ -124,9 +129,9 @@ def test_evaluate_answers_pure_refusal_stays_refused(settings, tmp_path):
     )
     llm = FakeLLM(
         [
-            "목줄을 해야 합니다 (제23조)",
-            "점검 주기는 조항에 있습니다",
-            "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요.",
+            reply("목줄을 해야 합니다 (제23조)"),
+            reply(NOT_FOUND_ANSWER, evidence="", answerable=False),
+            reply("관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요."),
         ]
     )
     result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
@@ -146,9 +151,9 @@ def test_evaluate_answers_refusal_with_citation_tail_stays_refused(settings, tmp
     )
     llm = FakeLLM(
         [
-            "목줄을 해야 합니다 (제23조)",
-            "점검 주기는 조항에 있습니다",
-            "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요. (제85조), (제86조), (별표 3)",
+            reply("목줄을 해야 합니다 (제23조)"),
+            reply(NOT_FOUND_ANSWER, evidence="", answerable=False),
+            reply("관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요. (제85조), (제86조), (별표 3)"),
         ]
     )
     result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
@@ -165,7 +170,7 @@ def test_evaluate_answers_reports_each_row(settings, tmp_path):
             "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
         }
     )
-    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    llm = FakeLLM([reply("목줄을 해야 합니다 (제23조)"), reply(NOT_FOUND_ANSWER, evidence="", answerable=False)])
     seen = []
 
     def on_row(index, total, row):
@@ -185,7 +190,7 @@ def test_evaluate_answers_removes_partial_on_success(settings, tmp_path):
             "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
         }
     )
-    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    llm = FakeLLM([reply("목줄을 해야 합니다 (제23조)"), reply(NOT_FOUND_ANSWER, evidence="", answerable=False)])
     evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
 
     eval_dir = settings.work_dir / "eval"
@@ -194,10 +199,10 @@ def test_evaluate_answers_removes_partial_on_success(settings, tmp_path):
 
 
 class FailingSecondLLM(FakeLLM):
-    def complete(self, system, messages, *, temperature=0.0, max_tokens=1024):
+    def complete(self, system, messages, **kwargs):
         if len(self.calls) >= 1:
             raise RuntimeError("boom")
-        return super().complete(system, messages, temperature=temperature, max_tokens=max_tokens)
+        return super().complete(system, messages, **kwargs)
 
 
 def test_evaluate_answers_keeps_partial_on_failure(settings, tmp_path):
@@ -208,7 +213,7 @@ def test_evaluate_answers_keeps_partial_on_failure(settings, tmp_path):
             "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
         }
     )
-    llm = FailingSecondLLM(["목줄을 해야 합니다 (제23조)"])
+    llm = FailingSecondLLM([reply("목줄을 해야 합니다 (제23조)")])
 
     with pytest.raises(RuntimeError):
         evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
@@ -228,7 +233,7 @@ def test_evaluate_answers_names_result_file_with_model(settings, tmp_path):
             "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
         }
     )
-    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    llm = FakeLLM([reply("목줄을 해야 합니다 (제23조)"), reply(NOT_FOUND_ANSWER, evidence="", answerable=False)])
     model_settings = dataclasses.replace(settings, llm_model="hf.co/foo:bar")
     result = evaluate_answers(csv_path, model_settings, k=5, searcher=searcher, llm=llm)
 
@@ -239,3 +244,28 @@ def test_evaluate_answers_names_result_file_with_model(settings, tmp_path):
     assert ":" not in name and "/" not in name
     assert json.loads(final_files[0].read_text(encoding="utf-8"))["model"] == "hf.co/foo:bar"
     assert result.model == "hf.co/foo:bar"
+
+
+def test_evaluate_answers_evidence_mismatch_twice_sets_fallback(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+            "우주선 발사 비용은 얼마인가요": [make_hit(1, "제5조")],
+        }
+    )
+    bad = reply("우주선 발사 비용은 (제5조)", evidence="완전히 다른 문장입니다 본문에 없습니다")
+    llm = FakeLLM(
+        [
+            reply("목줄을 해야 합니다 (제23조)"),
+            reply(NOT_FOUND_ANSWER, evidence="", answerable=False),
+            bad,
+            bad,
+        ]
+    )
+    result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
+
+    assert result.rows[2].fallback == "evidence"
+    assert result.rows[2].category == "unanswerable_refused"
+    assert result.rows[0].fallback is None

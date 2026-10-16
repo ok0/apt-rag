@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, NOT_FOUND_MARK, check_citations, generate_answer, pure_refusal_text, rewrite_question
+from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, NOT_FOUND_MARK, generate_answer, pure_refusal_text, rewrite_question
 from apt_rag.ingest.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
 from apt_rag.retrieval.embed import BgeM3Embedder, Embedder
@@ -205,22 +205,18 @@ def answer(
         )
     context = searcher.expand_context(hits)
     used = used or llm or get_llm(settings)
-    text = generate_answer(used, query, context)
-    cited, unverified = check_citations(text, context)
-    refusal = pure_refusal_text(text)
-    if refusal is not None:
-        text = refusal
-        cited, unverified = [], []
+    gen = generate_answer(used, query, context)
     return AnswerResult(
         question=question,
         search_query=query,
         rewritten_question=rewritten,
-        answer=text,
+        answer=gen.text,
         disclaimer=DISCLAIMER,
         hits=list(context),
-        cited_refs=cited,
-        unverified_refs=unverified,
+        cited_refs=gen.cited_refs,
+        unverified_refs=gen.unverified_refs,
         llm=used.name,
+        fallback=gen.fallback,
     )
 
 
@@ -319,6 +315,7 @@ def evaluate_answers(
                 unverified_refs=list(res.unverified_refs),
                 refused=refused,
                 answer=res.answer,
+                fallback=res.fallback,
             )
             rows.append(row)
             partial.write(json.dumps(asdict(row), ensure_ascii=False) + "\n")

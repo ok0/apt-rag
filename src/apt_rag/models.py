@@ -167,6 +167,7 @@ class AskEvalRow:
     unverified_refs: list[str]
     refused: bool
     answer: str
+    fallback: str | None = None
 
 
 @dataclass
@@ -211,3 +212,4 @@ class AnswerResult:
     cited_refs: list[str]             # 답변이 인용했고 검색 결과에 있는 article_ref (hits 순서)
     unverified_refs: list[str]        # 답변이 인용했지만 검색 결과에 없는 표기(공백 제거형)
     llm: str | None                   # 호출한 LLM 이름, 호출 안 했으면 None
+    fallback: str | None = None       # 검증 실패로 거절 문구로 대체한 이유(parse|evidence|language, '+'로 결합), 아니면 None
