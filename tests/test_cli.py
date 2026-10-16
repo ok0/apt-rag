@@ -191,6 +191,29 @@ def test_ask_prints_answer_hits_warning_disclaimer(monkeypatch, capsys, settings
     assert out.strip().splitlines()[-1] == DISCLAIMER
 
 
+def test_ask_prints_fallback_notice(monkeypatch, capsys, settings):
+    def fake_answer(question, settings, **kwargs):
+        return AnswerResult(
+            question="q",
+            search_query="q",
+            rewritten_question=None,
+            answer=NO_HIT_ANSWER,
+            disclaimer=DISCLAIMER,
+            hits=[_ask_hit()],
+            cited_refs=[],
+            unverified_refs=[],
+            llm="fake",
+            fallback="evidence",
+        )
+
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "answer", fake_answer)
+    assert main(["ask", "q"]) == 0
+    out = capsys.readouterr().out
+    assert "참고: 답변 검증(evidence)에 실패해 거절 문구로 대체했습니다." in out
+    assert out.strip().splitlines()[-1] == DISCLAIMER
+
+
 def test_ask_no_hits(monkeypatch, capsys, settings):
     def fake_answer(question, settings, **kwargs):
         return AnswerResult(

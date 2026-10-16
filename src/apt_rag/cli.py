@@ -349,6 +349,8 @@ def _cmd_ask(args: argparse.Namespace) -> int:
         )
     if result.llm and result.hits and not result.cited_refs:
         print("경고: 답변에 조항 번호 인용이 없습니다.")
+    if result.fallback:
+        print(f"참고: 답변 검증({result.fallback})에 실패해 거절 문구로 대체했습니다.")
     if result.llm:
         print(f"(LLM: {result.llm})")
     print(result.disclaimer)
