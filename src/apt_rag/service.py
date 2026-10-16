@@ -287,7 +287,7 @@ def evaluate_answers(
         for i, (question, cell) in enumerate(questions, 1):
             expected = parse_expected(cell)
             res = answer(question, settings, top_n=k, min_sim=min_sim, searcher=searcher, llm=llm)
-            refused = NOT_FOUND_MARK in res.answer and not res.cited_refs
+            refused = NOT_FOUND_MARK in res.answer and not res.cited_refs and pure_refusal_text(res.answer) is not None
             if not expected:
                 category = "unanswerable_refused" if refused else "unanswerable_answered"
                 gold_rank = None
