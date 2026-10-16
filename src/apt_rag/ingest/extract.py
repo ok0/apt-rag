@@ -134,33 +134,7 @@ def _page_entries(page: pymupdf.Page, pno: int, kind: str, ocr: OcrEngine) -> tu
     return kept, len(tabs)
 
 
-def extract_pdf(pdf: Path, report: InspectReport, ocr: OcrEngine) -> ExtractResult:
-    pdf = Path(pdf)
-    raw_chars = 0
-    table_count = 0
-    per_page: list[list[Line]] = []
-
-    with pymupdf.open(pdf) as doc:
-        for index, page in enumerate(doc):
-            pno = index + 1
-            raw_chars += count_content_chars(page.get_text())
-            kind = report.pages[index].kind
-            entries, n_tables = _page_entries(page, pno, kind, ocr)
-            table_count += n_tables
-            lines: list[Line] = []
-            for entry in entries:
-                if entry[0] == "table":
-                    lines.append(Line(text=entry[1], page=pno, page_end=pno, kind="table"))
-                    continue
-                text, lead, trail, _ = _normalize(entry[1])
-                lines.append(
-                    Line(text=text, page=pno, page_end=pno, kind="text", lead_space=lead, trail_space=trail)
-                )
-            per_page.append(lines)
-
-    text_pages = sum(1 for info in report.pages if info.kind in ("text", "mixed"))
-    threshold = max(3, 0.5 * text_pages)
-
+def _find_running_lines(per_page: list[list[Line]], threshold: float) -> tuple[set[tuple[int, int]], list[RemovedLine]]:
     removed: list[RemovedLine] = []
     candidates: list[tuple[int, int, str, str]] = []
     for page_index, lines in enumerate(per_page):
@@ -197,6 +171,37 @@ def extract_pdf(pdf: Path, report: InspectReport, ocr: OcrEngine) -> ExtractResu
         if len(key_pages[key]) >= threshold and len(key) >= 2:
             drop.add((page_index, i))
             removed.append(RemovedLine(page=per_page[page_index][i].page, text=text, reason=position))
+    return drop, removed
+
+
+def extract_pdf(pdf: Path, report: InspectReport, ocr: OcrEngine) -> ExtractResult:
+    pdf = Path(pdf)
+    raw_chars = 0
+    table_count = 0
+    per_page: list[list[Line]] = []
+
+    with pymupdf.open(pdf) as doc:
+        for index, page in enumerate(doc):
+            pno = index + 1
+            raw_chars += count_content_chars(page.get_text())
+            kind = report.pages[index].kind
+            entries, n_tables = _page_entries(page, pno, kind, ocr)
+            table_count += n_tables
+            lines: list[Line] = []
+            for entry in entries:
+                if entry[0] == "table":
+                    lines.append(Line(text=entry[1], page=pno, page_end=pno, kind="table"))
+                    continue
+                text, lead, trail, _ = _normalize(entry[1])
+                lines.append(
+                    Line(text=text, page=pno, page_end=pno, kind="text", lead_space=lead, trail_space=trail)
+                )
+            per_page.append(lines)
+
+    text_pages = sum(1 for info in report.pages if info.kind in ("text", "mixed"))
+    threshold = max(3, 0.5 * text_pages)
+
+    drop, removed = _find_running_lines(per_page, threshold)
 
     flat: list[Line] = []
     for page_index, lines in enumerate(per_page):
