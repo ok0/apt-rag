@@ -269,3 +269,26 @@ def test_evaluate_answers_evidence_mismatch_twice_sets_fallback(settings, tmp_pa
     assert result.rows[2].fallback == "evidence"
     assert result.rows[2].category == "unanswerable_refused"
     assert result.rows[0].fallback is None
+
+
+def test_evaluate_answers_row_records_answerable_and_evidence(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+        }
+    )
+    llm = FakeLLM([reply("목줄을 해야 합니다 (제23조)"), reply(NOT_FOUND_ANSWER, evidence="", answerable=False)])
+    result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
+
+    assert result.rows[0].answerable is True
+    assert result.rows[0].evidence == "본문 조항의 내용을 여기에 적습니다"
+    assert result.rows[1].answerable is False
+    assert result.rows[1].evidence == ""
+
+    saved = json.loads(list((settings.work_dir / "eval").glob("ask-eval-*.json"))[0].read_text(encoding="utf-8"))
+    assert saved["rows"][0]["answerable"] is True
+    assert saved["rows"][0]["evidence"] == "본문 조항의 내용을 여기에 적습니다"
+    assert saved["rows"][1]["answerable"] is False
+    assert saved["rows"][1]["evidence"] == ""

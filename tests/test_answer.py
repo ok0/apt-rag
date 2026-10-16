@@ -535,3 +535,31 @@ def test_few_shot_assistant_turns_are_valid():
             assert body is not None
             hit = make_hit(1, "예시", text=body.group(1))
             assert match_evidence(draft.evidence, [hit]) is not None
+
+
+def test_answer_records_answerable_false_and_evidence(settings):
+    result, _ = _answer_with(settings, [reply(NOT_FOUND_ANSWER, evidence="무관한 문장입니다", answerable=False)])
+    assert result.answerable is False
+    assert result.evidence == "무관한 문장입니다"
+
+
+def test_answer_records_answerable_true_and_evidence(settings):
+    result, _ = _answer_with(settings, [reply("답 (제23조)")])
+    assert result.answerable is True
+    assert result.evidence == "본문 조항의 내용을 여기에 적습니다"
+
+
+def test_answer_evidence_mismatch_twice_records_last_draft(settings):
+    first = reply("답 (제23조)", evidence="전혀 다른 문장입니다 본문 아님")
+    second = reply("다른 답 (제23조)", evidence="두번째 틀린 문장입니다 본문 아님")
+    result, _ = _answer_with(settings, [first, second])
+    assert result.fallback == "evidence"
+    assert result.answerable is True
+    assert result.evidence == "두번째 틀린 문장입니다 본문 아님"
+
+
+def test_answer_parse_failure_twice_leaves_answerable_none(settings):
+    result, _ = _answer_with(settings, ["그냥 텍스트", "또 텍스트"])
+    assert result.fallback == "parse"
+    assert result.answerable is None
+    assert result.evidence == ""

@@ -243,6 +243,8 @@ class GeneratedAnswer:
     cited_refs: list[str]
     unverified_refs: list[str]
     fallback: str | None = None
+    answerable: bool | None = None
+    evidence: str = ""
 
 
 def _with_notes(messages: list[dict[str, str]], notes: list[str]) -> list[dict[str, str]]:
@@ -254,6 +256,7 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
     base = build_answer_messages(question, hits)
     notes: list[str] = []
     reasons: list[str] = []
+    last_draft: AnswerDraft | None = None
     for _ in range(2):
         raw = llm.complete(
             ANSWER_SYSTEM_PROMPT,
@@ -268,8 +271,11 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         if draft is None:
             notes, reasons = [RETRY_NOTE_FORMAT], ["parse"]
             continue
-        if not draft.answerable or pure_refusal_text(draft.answer) is not None:
-            return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], None)
+        last_draft = draft
+        if not draft.answerable:
+            return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], None, answerable=False, evidence=draft.evidence)
+        if pure_refusal_text(draft.answer) is not None:
+            return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], None, answerable=True, evidence=draft.evidence)
         matched = match_evidence(draft.evidence, hits)
         foreign = foreign_tokens(draft.answer, hits)
         notes, reasons = [], []
@@ -283,8 +289,15 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
             cited_ans, unverified = check_citations(draft.answer, hits)
             wanted = set(cited_ans) | {hits[i].article_ref for i in matched}
             cited = [r for r in dict.fromkeys(h.article_ref for h in hits) if r in wanted]
-            return GeneratedAnswer(draft.answer, cited, unverified, None)
-    return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], "+".join(reasons))
+            return GeneratedAnswer(draft.answer, cited, unverified, None, answerable=True, evidence=draft.evidence)
+    return GeneratedAnswer(
+        NOT_FOUND_ANSWER,
+        [],
+        [],
+        "+".join(reasons),
+        answerable=last_draft.answerable if last_draft else None,
+        evidence=last_draft.evidence if last_draft else "",
+    )
 
 
 _STATUTE_BEFORE = ("법", "령", "칙", "」", "규칙", "시행령")

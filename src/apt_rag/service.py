@@ -217,6 +217,8 @@ def answer(
         unverified_refs=gen.unverified_refs,
         llm=used.name,
         fallback=gen.fallback,
+        answerable=gen.answerable,
+        evidence=gen.evidence,
     )
 
 
@@ -316,6 +318,8 @@ def evaluate_answers(
                 refused=refused,
                 answer=res.answer,
                 fallback=res.fallback,
+                answerable=res.answerable,
+                evidence=res.evidence,
             )
             rows.append(row)
             partial.write(json.dumps(asdict(row), ensure_ascii=False) + "\n")
