@@ -10,6 +10,7 @@ from apt_rag.models import ChatTurn, SearchHit, page_range
 
 DISCLAIMER = "※ 이 답변은 참고용이며, 최종 해석은 관리사무소에 확인하세요."
 NO_HIT_ANSWER = "관리규약에서 질문과 관련된 조항을 찾지 못했습니다. 관리사무소에 문의해 주세요."
+NOT_FOUND_MARK = "찾지 못했습니다"
 MAX_HISTORY_MESSAGES = 6
 MAX_HISTORY_CHARS = 500
 MAX_REWRITE_CHARS = 300

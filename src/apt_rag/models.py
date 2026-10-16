@@ -156,6 +156,27 @@ class EvalResult:
 
 
 @dataclass
+class AskEvalRow:
+    question: str
+    expected: list[str]
+    category: str
+    gold_rank: int | None
+    hits: list[str]
+    cited_refs: list[str]
+    unverified_refs: list[str]
+    refused: bool
+    answer: str
+
+
+@dataclass
+class AskEvalResult:
+    k: int
+    total: int
+    counts: dict[str, int]
+    rows: list[AskEvalRow]
+
+
+@dataclass
 class GeneratedQuestion:
     question: str
     expected_article: str
