@@ -153,6 +153,7 @@ def pure_refusal_text(answer: str) -> str | None:
 def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], list[str]]:
     compact = re.sub(r"\s+", "", answer)
     keys = [(hit, re.sub(r"\s+", "", hit.article_ref)) for hit in hits]
+    context_compact = "".join(re.sub(r"\s+", "", hit.text) for hit in hits)
     cited_hits: set[int] = set()
     unverified: list[str] = []
     found = [
@@ -166,7 +167,7 @@ def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], 
             if key == m or (m.startswith("제") and key.endswith(m)) or key.startswith(m + "("):
                 cited_hits.add(index)
                 matched = True
-        if not matched:
+        if not matched and m not in context_compact:
             unverified.append(m)
     cited: list[str] = []
     for index, (hit, _) in enumerate(keys):

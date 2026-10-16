@@ -167,6 +167,30 @@ def test_check_citations_allows_appendix_spacing_difference():
     assert unverified == []
 
 
+def test_check_citations_allows_reference_mentioned_in_context():
+    hits = [make_hit(1, "제37조", text="신청서는 [별지 제7호서식]을 사용합니다.")]
+    text = "신청서는 별지 제7호서식을 사용하세요 (제37조)."
+    cited, unverified = check_citations(text, hits)
+    assert cited == ["제37조"]
+    assert unverified == []
+
+
+def test_check_citations_flags_reference_missing_from_context():
+    hits = [make_hit(1, "제89조", text="제69조의2에 따릅니다.")]
+    text = "제999조에 따라 처리합니다 (제89조)."
+    cited, unverified = check_citations(text, hits)
+    assert cited == ["제89조"]
+    assert unverified == ["제999조"]
+
+
+def test_check_citations_mentioned_reference_not_cited():
+    hits = [make_hit(1, "제37조", text="신청서는 [별지 제7호서식]을 사용합니다.")]
+    text = "별지 제7호서식을 사용하세요."
+    cited, unverified = check_citations(text, hits)
+    assert cited == []
+    assert unverified == []
+
+
 def test_pure_refusal_drops_citation(settings):
     llm = FakeLLM(["관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요.(제29조)"])
     result = answer(
