@@ -136,12 +136,20 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> str:
     return text
 
 
+_STATUTE_BEFORE = ("법", "령", "칙", "」", "규칙", "시행령")
+
+
 def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], list[str]]:
     compact = re.sub(r"\s+", "", answer)
     keys = [(hit, re.sub(r"\s+", "", hit.article_ref)) for hit in hits]
     cited_hits: set[int] = set()
     unverified: list[str] = []
-    for m in dict.fromkeys(_CITE.findall(compact)):
+    found = [
+        mt.group(0)
+        for mt in _CITE.finditer(compact)
+        if not compact[: mt.start()].endswith(_STATUTE_BEFORE)
+    ]
+    for m in dict.fromkeys(found):
         matched = False
         for index, (_, key) in enumerate(keys):
             if key == m or (m.startswith("제") and key.endswith(m)) or key.startswith(m + "("):
