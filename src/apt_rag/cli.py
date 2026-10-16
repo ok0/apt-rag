@@ -30,6 +30,12 @@ BAND_TOP_K_HELP = "완화 구간의 '상위' 기준 순위 (기본 APT_RAG_BAND_
 BAND_NOTICE = "참고: 벡터 유사도가 기준에 조금 못 미치지만, 벡터와 BM25가 모두 상위에 올린 조항이 있어 결과를 표시합니다."
 
 
+def _add_filter_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
+    parser.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
+    parser.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="apt-rag",
@@ -61,17 +67,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--top-n", type=int, default=5)
     p_search.add_argument("--excerpt", type=int, default=160)
     p_search.add_argument("--json", action="store_true")
-    p_search.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
-    p_search.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
-    p_search.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
+    _add_filter_args(p_search)
 
     p_eval = sub.add_parser("eval", help="질문 CSV로 검색 적중률 평가")
     p_eval.add_argument("csv")
     p_eval.add_argument("-k", type=int, default=5)
     p_eval.add_argument("--json", action="store_true")
-    p_eval.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
-    p_eval.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
-    p_eval.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
+    _add_filter_args(p_eval)
 
     p_ask = sub.add_parser("ask", help="검색된 조항을 근거로 LLM이 답변 (APT_RAG_LLM)")
     p_ask.add_argument("question")
@@ -82,9 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_ask.add_argument("--top-n", type=int, default=5)
     p_ask.add_argument("--json", action="store_true")
-    p_ask.add_argument("--min-sim", type=float, default=None, help=MIN_SIM_HELP)
-    p_ask.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
-    p_ask.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
+    _add_filter_args(p_ask)
 
     p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (APT_RAG_LLM)")
     p_gen.add_argument("--count", type=int, default=40, help="질문을 만들 조항 수 (기본 40)")
