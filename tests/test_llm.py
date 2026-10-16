@@ -55,6 +55,23 @@ def test_ollama_complete_json_mode_and_seed(monkeypatch):
     assert body["options"]["seed"] == 3
 
 
+def test_ollama_complete_schema(monkeypatch):
+    client = OllamaClient("http://localhost:11434", "m")
+    calls = []
+
+    def fake_request(method, path, body=None):
+        calls.append((method, path, body))
+        return {"message": {"content": "답"}}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    assert client.complete("S", [{"role": "user", "content": "q"}], schema={"type": "object"}) == "답"
+    _, _, body = calls[0]
+    assert body["format"] == {"type": "object"}
+    client.complete("S", [{"role": "user", "content": "q"}], json_mode=True, schema={"type": "object"})
+    _, _, body = calls[1]
+    assert body["format"] == {"type": "object"}
+
+
 def test_ollama_complete_connection_error():
     client = OllamaClient("http://127.0.0.1:1", "m")
     with pytest.raises(OllamaConnectionError) as info:

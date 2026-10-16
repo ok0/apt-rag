@@ -38,6 +38,7 @@ class LLM(Protocol):
         max_tokens: int = 1024,
         seed: int | None = None,
         json_mode: bool = False,
+        schema: dict | None = None,
     ) -> str: ...
 
     def check_model(self) -> None: ...
@@ -105,6 +106,7 @@ class OllamaClient:
         max_tokens: int = 1024,
         seed: int | None = None,
         json_mode: bool = False,
+        schema: dict | None = None,
     ) -> str:
         body = {
             "model": self.model,
@@ -118,7 +120,9 @@ class OllamaClient:
         }
         if seed is not None:
             body["options"]["seed"] = seed
-        if json_mode:
+        if schema is not None:
+            body["format"] = schema
+        elif json_mode:
             body["format"] = "json"
         return self._post_chat(body)
 
