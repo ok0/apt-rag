@@ -5,7 +5,7 @@ from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder, Embedder
 from apt_rag.models import Chunk, SearchHit
 from apt_rag.synonyms import Synonyms, load_synonyms
-from apt_rag.store import load_index
+from apt_rag.store import IndexMismatchError, load_index
 
 RRF_K = 60
 CANDIDATES = 50
@@ -36,7 +36,9 @@ class Searcher:
             if self._embedder is None:
                 self._embedder = BgeM3Embedder(self._settings)
             if self._embedder.model_name != manifest["embed_model"]:
-                raise RuntimeError("임베딩 모델 불일치")
+                raise IndexMismatchError(
+                    f"임베딩 모델 불일치: 색인={manifest['embed_model']}, 현재={self._embedder.model_name}. index를 다시 실행하거나 APT_RAG_EMBED_MODEL을 맞추세요"
+                )
             self._loaded = (collection, chunks, bm25)
         return self._loaded
 

@@ -12,6 +12,10 @@ from apt_rag.bm25 import BM25Index
 from apt_rag.config import Settings
 from apt_rag.models import Chunk
 
+class IndexMismatchError(RuntimeError):
+    pass
+
+
 BATCH = 256
 
 
@@ -76,9 +80,12 @@ def load_index(settings: Settings):
     if not manifest_path.exists():
         raise FileNotFoundError("색인이 없습니다. 먼저 'apt-rag index <pdf>'를 실행하세요.")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    collection = _client(settings).get_collection(settings.collection_name, embedding_function=None)
+    try:
+        collection = _client(settings).get_collection(settings.collection_name, embedding_function=None)
+    except (NotFoundError, ValueError) as exc:
+        raise FileNotFoundError("색인이 없습니다. 먼저 'apt-rag index <pdf>'를 실행하세요.") from exc
     if collection.count() != manifest["chunk_count"]:
-        raise RuntimeError("색인 불일치: index를 다시 실행하세요")
+        raise IndexMismatchError("색인 불일치: index를 다시 실행하세요")
     rows = json.loads((index_dir / "chunks.json").read_text(encoding="utf-8"))
     chunks = {r["chunk_id"]: Chunk(**r) for r in rows}
     bm25 = BM25Index.load(index_dir / "bm25_tokens.json")

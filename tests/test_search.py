@@ -6,8 +6,9 @@ from apt_rag.bm25 import tokenize
 from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder
 from apt_rag.models import Chunk
+from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.search import Searcher, rrf
-from apt_rag.store import load_index, write_index
+from apt_rag.store import IndexMismatchError, load_index, write_index
 from apt_rag.synonyms import Synonyms
 
 
@@ -92,8 +93,13 @@ def test_model_mismatch_raises(settings, hash_embedder):
     build(settings, hash_embedder, chunks)
     other = type(hash_embedder)()
     other.model_name = "other-model"
-    with pytest.raises(RuntimeError):
+    with pytest.raises(IndexMismatchError):
         Searcher(settings, other).search("목적", 5)
+
+
+def test_unknown_ocr_engine_raises_unavailable():
+    with pytest.raises(OcrUnavailableError):
+        get_ocr_engine("tesseract")
 
 
 @pytest.mark.slow

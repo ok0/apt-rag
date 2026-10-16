@@ -5,6 +5,7 @@ from apt_rag.answer import DISCLAIMER, NO_HIT_ANSWER
 from apt_rag.cli import main
 from apt_rag.llm import OllamaConnectionError
 from apt_rag.models import AnswerResult, ChatTurn, SearchHit
+from apt_rag.store import IndexMismatchError
 
 
 def test_help_exits_zero():
@@ -41,6 +42,20 @@ def test_search_no_hits_prints_message(monkeypatch, capsys):
     monkeypatch.setattr(cli, "load_settings", lambda: None)
     assert main(["search", "오늘 점심"]) == 0
     assert "관련 조항을 찾지 못했습니다" in capsys.readouterr().out
+
+
+def test_search_index_mismatch_exits_one(monkeypatch, capsys):
+    class Mismatched:
+        def __init__(self, settings):
+            pass
+
+        def search(self, query, top_n=5, min_sim=None):
+            raise IndexMismatchError("색인 불일치: index를 다시 실행하세요")
+
+    monkeypatch.setattr(cli, "Searcher", Mismatched)
+    monkeypatch.setattr(cli, "load_settings", lambda: None)
+    assert main(["search", "q"]) == 1
+    assert "색인 불일치" in capsys.readouterr().err
 
 
 def test_search_prints_vec_sim_and_passes_min_sim(monkeypatch, capsys):

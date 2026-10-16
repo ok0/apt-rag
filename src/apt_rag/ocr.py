@@ -41,4 +41,4 @@ class NullOcr:
 def get_ocr_engine(name: str) -> OcrEngine:
     if name == "none":
         return NullOcr()
-    raise ValueError("지원하지 않는 OCR 엔진")
+    raise OcrUnavailableError(f"지원하지 않는 OCR 엔진: {name} (현재 none만 지원)")

@@ -15,6 +15,7 @@ from apt_rag.llm import LLMError
 from apt_rag.qgen import split_parts
 from apt_rag.search import Searcher
 from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
+from apt_rag.store import IndexMismatchError
 
 
 MIN_SIM_HELP = (
@@ -177,7 +178,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
     settings = _with_band_overrides(load_settings(), args)
     try:
         hits = Searcher(settings).search(args.query, top_n=args.top_n, min_sim=args.min_sim)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, IndexMismatchError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     if args.json:
@@ -209,7 +210,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     settings = _with_band_overrides(load_settings(), args)
     try:
         result = evaluate(csv_path, settings, k=args.k, min_sim=args.min_sim)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, IndexMismatchError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     if args.json:
@@ -263,7 +264,7 @@ def _cmd_ask(args: argparse.Namespace) -> int:
     try:
         history = load_history(Path(args.history)) if args.history else []
         result = answer(args.question, settings, history=history, top_n=args.top_n, min_sim=args.min_sim)
-    except (FileNotFoundError, ValueError, LLMError) as exc:
+    except (FileNotFoundError, ValueError, LLMError, IndexMismatchError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     if args.json:
