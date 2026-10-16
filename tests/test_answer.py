@@ -7,6 +7,7 @@ from apt_rag.generation.answer import (
     ANSWER_SYSTEM_PROMPT,
     DISCLAIMER,
     NO_HIT_ANSWER,
+    NOT_FOUND_MARK,
     REWRITE_SYSTEM_PROMPT,
     check_citations,
     load_history,
@@ -96,6 +97,13 @@ def test_prompt_contains_refs_and_text(settings):
     assert '번호="별표 8"' in user
     assert "반려견 산책" in user
     assert "데이터" in first["system"]
+
+
+def test_answer_prompt_forbids_inference_and_has_not_found_text():
+    assert "추정" in ANSWER_SYSTEM_PROMPT
+    assert "일반 상식" in ANSWER_SYSTEM_PROMPT
+    assert "관리규약에서 해당 내용을 찾지 못했습니다. 관리사무소에 문의해 주세요." in ANSWER_SYSTEM_PROMPT
+    assert NOT_FOUND_MARK in ANSWER_SYSTEM_PROMPT
 
 
 def test_no_rewrite_without_history(settings):
