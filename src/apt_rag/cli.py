@@ -15,7 +15,7 @@ from apt_rag.generation.llm import LLMError
 from apt_rag.models import Chunk, page_range
 from apt_rag.generation.qgen import split_parts
 from apt_rag.retrieval.search import Searcher
-from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
+from apt_rag.service import ASK_EVAL_CATEGORIES, answer, build_index, evaluate, evaluate_answers, generate_questions, inspect_pdf
 from apt_rag.retrieval.store import IndexMismatchError
 
 
@@ -75,7 +75,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("--json", action="store_true")
     _add_filter_args(p_eval)
 
-    p_ask = sub.add_parser("ask", help="검색된 조항을 근거로 LLM이 답변 (APT_RAG_LLM)")
+    p_eval_ask = sub.add_parser(
+        "eval-ask", help="질문 CSV로 답변 단위 진단 평가 (검색/생성 실패 분류, APT_RAG_LLM)"
+    )
+    p_eval_ask.add_argument("csv")
+    p_eval_ask.add_argument("-k", type=int, default=5)
+    p_eval_ask.add_argument("--json", action="store_true")
+    _add_filter_args(p_eval_ask)
+
+    p_ask =sub.add_parser("ask", help="검색된 조항을 근거로 LLM이 답변 (APT_RAG_LLM)")
     p_ask.add_argument("question")
     p_ask.add_argument(
         "--history",
@@ -229,6 +237,34 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_eval_ask(args: argparse.Namespace) -> int:
+    csv_path = Path(args.csv)
+    if not csv_path.exists():
+        print(f"파일을 찾을 수 없습니다: {csv_path}", file=sys.stderr)
+        return 1
+    settings = _with_band_overrides(load_settings(), args)
+    try:
+        result = evaluate_answers(csv_path, settings, k=args.k, min_sim=args.min_sim)
+    except (FileNotFoundError, ValueError, IndexMismatchError, LLMError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+        return 0
+    print(f"분류별 건수 (k={result.k}, 총 {result.total}문항):")
+    for category in ASK_EVAL_CATEGORIES:
+        print(f"- {category}: {result.counts[category]}")
+    for row in result.rows:
+        if row.category in ("cited", "unanswerable_refused"):
+            continue
+        print(
+            f"- [{row.category}] Q: {row.question} / 정답: {', '.join(row.expected) or '(없음)'} / "
+            f"정답 순위(컷오프 없음): {row.gold_rank or '-'} / 근거: {', '.join(row.hits)}"
+        )
+    print(f"저장: {settings.work_dir / 'eval'}")
+    return 0
+
+
 def _cmd_gen_questions(args: argparse.Namespace) -> int:
     settings = load_settings()
 
@@ -325,6 +361,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_search(args)
     if args.command == "eval":
         return _cmd_eval(args)
+    if args.command == "eval-ask":
+        return _cmd_eval_ask(args)
     if args.command == "ask":
         return _cmd_ask(args)
     if args.command == "gen-questions":
