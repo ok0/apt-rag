@@ -16,6 +16,7 @@ from apt_rag.generation.answer import (
     RETRY_NOTE_EVIDENCE,
     RETRY_NOTE_FORMAT,
     RETRY_NOTE_KOREAN,
+    RETRY_NOTE_REF,
     check_citations,
     foreign_tokens,
     load_history,
@@ -543,6 +544,48 @@ def test_answer_evidence_and_language_notes_attached_together(settings):
     assert result.fallback == "evidence+language"
 
 
+def test_answer_retries_on_unverified_citation(settings):
+    result, llm = _answer_with(settings, [reply("답입니다 (제904조제2항)"), reply("답 (제23조)")])
+    assert len(llm.calls) == 2
+    assert llm.calls[1]["messages"][-1]["content"].endswith(RETRY_NOTE_REF.format(refs="제904조"))
+    assert result.answer == "답 (제23조)"
+    assert result.fallback is None
+    assert result.unverified_refs == []
+
+
+def test_answer_unverified_citation_twice_falls_back(settings):
+    bad = reply("답입니다 (제904조제2항)")
+    result, llm = _answer_with(settings, [bad, bad])
+    assert len(llm.calls) == 2
+    assert result.fallback == "citation"
+    assert result.answer == NOT_FOUND_ANSWER
+    assert result.cited_refs == []
+    assert result.unverified_refs == []
+    assert result.answerable is True
+
+
+def test_answer_statute_reference_does_not_trigger_citation_retry(settings):
+    result, llm = _answer_with(settings, [reply("법 제14조제1항에 따라 처리합니다 (제23조)")])
+    assert len(llm.calls) == 1
+    assert result.fallback is None
+
+
+def test_answer_reference_in_context_does_not_trigger_citation_retry(settings):
+    hits = [make_hit(1, "제23조", text="본문 조항의 내용을 여기에 적습니다 제69조의2에 따른다")]
+    result, llm = _answer_with(settings, [reply("제69조의2에 따릅니다 (제23조)")], hits=hits)
+    assert len(llm.calls) == 1
+    assert result.fallback is None
+
+
+def test_answer_evidence_and_citation_notes_attached_together(settings):
+    both_bad = reply("답 (제999조)", evidence="전혀 다른 문장입니다 본문 아님")
+    result, llm = _answer_with(settings, [both_bad, both_bad])
+    last = llm.calls[1]["messages"][-1]["content"]
+    assert RETRY_NOTE_EVIDENCE in last
+    assert RETRY_NOTE_REF.format(refs="제999조") in last
+    assert result.fallback == "evidence+citation"
+
+
 def test_answer_accepts_list_item_merged_evidence(settings):
     result, llm = _answer_with(
         settings,
@@ -589,6 +632,14 @@ def test_few_shot_assistant_turns_are_valid():
             assert body is not None
             hit = make_hit(1, "예시", text=body.group(1))
             assert match_evidence(draft.evidence, [hit]) is not None
+
+
+def test_few_shot_citations_are_canaries():
+    for i in range(1, len(FEW_SHOT), 2):
+        draft = parse_answer_json(FEW_SHOT[i]["content"])
+        assert draft is not None
+        if draft.answerable:
+            assert check_citations(draft.answer, [make_hit(1, "제23조")])[1]
 
 
 def test_answer_records_answerable_false_and_evidence(settings):

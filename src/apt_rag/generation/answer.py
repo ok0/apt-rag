@@ -253,6 +253,7 @@ FEW_SHOT: list[dict[str, str]] = [
 RETRY_NOTE_FORMAT = "주의: 직전 응답이 형식에 맞지 않았습니다. answerable, evidence, answer 세 키를 가진 JSON 하나만 출력하세요."
 RETRY_NOTE_EVIDENCE = "주의: evidence는 <조항> 본문의 문장을 한 글자도 바꾸지 말고 그대로 복사해야 합니다. 그대로 옮길 근거 문장이 없으면 answerable을 false로 하세요."
 RETRY_NOTE_KOREAN = "주의: answer는 반드시 한국어로만 작성하세요. 중국어, 일본어, 한자, 영어 단어를 섞지 마세요."
+RETRY_NOTE_REF = '주의: answer에 쓴 조항 번호 {refs}는 위 <조항>에 없습니다. 괄호 안 조항 번호는 <조항 번호="..."> 속성에 적힌 번호만 쓰고, 앞선 예시 대화의 조항 번호는 쓰지 마세요.'
 
 
 def build_answer_messages(question: str, hits: Sequence[SearchHit]) -> list[dict[str, str]]:
@@ -304,6 +305,7 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
             return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], None, answerable=True, evidence=draft.evidence)
         matched = match_evidence(draft.evidence, hits)
         foreign = foreign_tokens(draft.answer, hits)
+        cited_ans, unverified = check_citations(draft.answer, hits)
         notes, reasons = [], []
         if matched is None:
             notes.append(RETRY_NOTE_EVIDENCE)
@@ -311,8 +313,10 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         if foreign:
             notes.append(RETRY_NOTE_KOREAN)
             reasons.append("language")
+        if unverified:
+            notes.append(RETRY_NOTE_REF.format(refs=", ".join(unverified)))
+            reasons.append("citation")
         if not notes:
-            cited_ans, unverified = check_citations(draft.answer, hits)
             wanted = set(cited_ans) | {hits[i].article_ref for i in matched}
             cited = [r for r in dict.fromkeys(h.article_ref for h in hits) if r in wanted]
             return GeneratedAnswer(draft.answer, cited, unverified, None, answerable=True, evidence=draft.evidence)
