@@ -139,6 +139,17 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> str:
 _STATUTE_BEFORE = ("법", "령", "칙", "」", "규칙", "시행령")
 
 
+def pure_refusal_text(answer: str) -> str | None:
+    if NOT_FOUND_MARK not in answer:
+        return None
+    rest = re.sub(r"\([^)]*\)", "", answer)
+    rest = re.sub(r"관리규약에서[^.]*찾지 못했습니다\.", "", rest)
+    rest = re.sub(r"관리사무소에 문의해 주세요\.?", "", rest)
+    if re.sub(r"\s+", "", rest):
+        return None
+    return re.sub(r"\s*\([^)]*\)", "", answer).strip()
+
+
 def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], list[str]]:
     compact = re.sub(r"\s+", "", answer)
     keys = [(hit, re.sub(r"\s+", "", hit.article_ref)) for hit in hits]

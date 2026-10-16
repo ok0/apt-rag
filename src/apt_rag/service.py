@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, NOT_FOUND_MARK, check_citations, generate_answer, rewrite_question
+from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER, NOT_FOUND_MARK, check_citations, generate_answer, pure_refusal_text, rewrite_question
 from apt_rag.ingest.chunk import build_units, chunk_units, write_chunks_json
 from apt_rag.config import Settings
 from apt_rag.retrieval.embed import BgeM3Embedder, Embedder
@@ -206,6 +206,10 @@ def answer(
     used = used or llm or get_llm(settings)
     text = generate_answer(used, query, context)
     cited, unverified = check_citations(text, context)
+    refusal = pure_refusal_text(text)
+    if refusal is not None:
+        text = refusal
+        cited, unverified = [], []
     return AnswerResult(
         question=question,
         search_query=query,
