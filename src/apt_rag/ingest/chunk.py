@@ -372,6 +372,33 @@ def _split_items(lines: list[Line]) -> list[tuple[int | None, list[Line]]]:
     return [(no, seg_lines) for no, seg_lines in segs]
 
 
+_Group = tuple[int | None, int | None, list[Line]]
+
+
+def _segment_groups(segs: list[tuple[int | None, list[Line]]], as_item: bool) -> list[_Group]:
+    groups: list[_Group] = []
+    for no, seg_lines in segs:
+        paragraph_no, item_no = (None, no) if as_item else (no, None)
+        if len(_seg_text(seg_lines)) > MAX_CHARS:
+            groups.extend((paragraph_no, item_no, piece) for piece in _pack(seg_lines))
+        else:
+            groups.append((paragraph_no, item_no, seg_lines))
+    return groups
+
+
+def _groups_for(unit: Unit) -> list[_Group]:
+    if len(_seg_text(unit.lines)) <= MAX_CHARS:
+        return [(None, None, unit.lines)]
+    if unit.article_num is not None:
+        paragraphs = _split_paragraphs(unit.lines)
+        if len(paragraphs) >= 2:
+            return _segment_groups(paragraphs, as_item=False)
+        items = _split_items(unit.lines)
+        if len(items) >= 2:
+            return _segment_groups(items, as_item=True)
+    return [(None, None, piece) for piece in _pack(unit.lines)]
+
+
 def chunk_units(units: list[Unit], doc_id: str) -> tuple[list[Chunk], list[ExcludedSegment]]:
     chunks: list[Chunk] = []
     excluded: list[ExcludedSegment] = []
@@ -390,24 +417,7 @@ def chunk_units(units: list[Unit], doc_id: str) -> tuple[list[Chunk], list[Exclu
                 )
             )
             continue
-        if len(_seg_text(unit.lines)) <= MAX_CHARS:
-            groups: list[tuple[int | None, int | None, list[Line]]] = [(None, None, unit.lines)]
-        elif unit.article_num is not None and len(_split_paragraphs(unit.lines)) >= 2:
-            groups = []
-            for no, seg_lines in _split_paragraphs(unit.lines):
-                if len(_seg_text(seg_lines)) > MAX_CHARS:
-                    groups.extend((no, None, piece) for piece in _pack(seg_lines))
-                else:
-                    groups.append((no, None, seg_lines))
-        elif unit.article_num is not None and len(_split_items(unit.lines)) >= 2:
-            groups = []
-            for item_no, seg_lines in _split_items(unit.lines):
-                if len(_seg_text(seg_lines)) > MAX_CHARS:
-                    groups.extend((None, item_no, piece) for piece in _pack(seg_lines))
-                else:
-                    groups.append((None, item_no, seg_lines))
-        else:
-            groups = [(None, None, piece) for piece in _pack(unit.lines)]
+        groups = _groups_for(unit)
         total = len(groups)
         for idx, (no, item_no, glines) in enumerate(groups):
             split_index = idx + 1 if total > 1 else None
@@ -444,12 +454,6 @@ def chunk_units(units: list[Unit], doc_id: str) -> tuple[list[Chunk], list[Exclu
     for chunk in chunks:
         chunk.embed_text = chunk.header + "\n" + chunk.text
     return chunks, excluded
-
-
-def chunk_lines(lines: list[Line], doc_id: str) -> tuple[list[Chunk], list[ExcludedSegment], list[Line]]:
-    units, structure = build_units(lines)
-    chunks, excluded = chunk_units(units, doc_id)
-    return chunks, excluded, structure
 
 
 def write_chunks_json(
