@@ -54,6 +54,7 @@ class PrepareResult:
     doc_id: str
     work_dir: Path
     page_count: int
+    sha256: str
     extract: ExtractResult
     chunks: list[Chunk]
     excluded: list[ExcludedSegment]
@@ -86,11 +87,12 @@ def prepare(pdf: Path, settings: Settings) -> PrepareResult:
     units, structure = build_units(extract_result.lines)
     chunks, excluded = chunk_units(units, report.doc_id)
     out_dir = settings.work_dir / report.doc_id
+    sha256 = _sha256(pdf)
     write_chunks_json(
         out_dir / "chunks.json",
         report.doc_id,
         str(pdf),
-        _sha256(pdf),
+        sha256,
         chunks,
         excluded,
         structure,
@@ -104,6 +106,7 @@ def prepare(pdf: Path, settings: Settings) -> PrepareResult:
         doc_id=report.doc_id,
         work_dir=out_dir,
         page_count=report.page_count,
+        sha256=sha256,
         extract=extract_result,
         chunks=chunks,
         excluded=excluded,
@@ -143,7 +146,7 @@ def build_index(
     manifest = {
         "doc_id": prep.doc_id,
         "source_pdf": str(pdf),
-        "sha256": _sha256(Path(pdf)),
+        "sha256": prep.sha256,
         "embed_model": embedder.model_name,
         "dim": len(vectors[0]) if vectors else 0,
         "chunk_count": len(prep.chunks),

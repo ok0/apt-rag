@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 import pytest
 
 from apt_rag.config import Settings
@@ -69,3 +72,10 @@ def test_example_length_and_coverage(prepared):
             assert c.char_len <= 1500, c.chunk_id
     assert not prepared.report.has_errors
     assert abs(prepared.report.summary["chunk_ratio"] - 1) <= 0.001
+
+
+def test_prepare_records_sha256(prepared, example_pdf):
+    expected = hashlib.sha256(example_pdf.read_bytes()).hexdigest()
+    assert prepared.sha256 == expected
+    data = json.loads((prepared.work_dir / "chunks.json").read_text(encoding="utf-8"))
+    assert data["sha256"] == expected
