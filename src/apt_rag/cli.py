@@ -11,7 +11,7 @@ from apt_rag import __version__
 from apt_rag.answer import load_history
 from apt_rag.config import load_settings
 from apt_rag.ocr import OcrUnavailableError
-from apt_rag.llm import LLMError, OllamaError
+from apt_rag.llm import LLMError
 from apt_rag.qgen import split_parts
 from apt_rag.search import Searcher
 from apt_rag.service import answer, build_index, evaluate, generate_questions, inspect_pdf
@@ -84,13 +84,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("--sim-band", type=float, default=None, help=SIM_BAND_HELP)
     p_ask.add_argument("--band-top-k", type=int, default=None, help=BAND_TOP_K_HELP)
 
-    p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (로컬 ollama)")
+    p_gen = sub.add_parser("gen-questions", help="색인 청크로 평가 질문 CSV 초안 생성 (APT_RAG_LLM)")
     p_gen.add_argument("--count", type=int, default=40, help="질문을 만들 조항 수 (기본 40)")
     p_gen.add_argument("--per-article", type=int, default=1, help="조항당 질문 수 (기본 1)")
     p_gen.add_argument(
         "--out", default="eval/generated_questions.csv", help="출력 CSV 경로 (기본 eval/generated_questions.csv)"
     )
-    p_gen.add_argument("--model", default=None, help="ollama 모델 이름 (기본 APT_RAG_LLM_MODEL 또는 qwen2.5:7b)")
+    p_gen.add_argument("--model", default=None, help="LLM 모델 이름 (기본 APT_RAG_LLM_MODEL 또는 qwen2.5:7b)")
     p_gen.add_argument("--seed", type=int, default=42, help="조항 샘플링과 생성 시드 (기본 42)")
     p_gen.add_argument("--parts", default="본문", help="대상 부분, 쉼표로 여러 개 (예: 본문,별표; 기본 본문)")
     p_gen.add_argument("--min-chars", type=int, default=80, help="청크 최소 글자 수 (기본 80)")
@@ -250,7 +250,7 @@ def _cmd_gen_questions(args: argparse.Namespace) -> int:
             force=args.force,
             on_progress=progress,
         )
-    except (FileNotFoundError, FileExistsError, OllamaError) as exc:
+    except (FileNotFoundError, FileExistsError, LLMError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print(f"생성 {len(result.questions)}개, 건너뜀 {len(result.skipped)}개, 저장: {result.out_path}")

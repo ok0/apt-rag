@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from collections.abc import Callable, Collection, Sequence
@@ -13,7 +14,7 @@ from apt_rag.config import Settings
 from apt_rag.embed import BgeM3Embedder
 from apt_rag.evaluate import evaluate_csv
 from apt_rag.extract import extract_pdf, write_extracted_md, write_pages_json
-from apt_rag.llm import LLM, OllamaClient, get_llm
+from apt_rag.llm import LLM, get_llm
 from apt_rag.models import AnswerResult, Chunk, ChatTurn, EvalResult, ExcludedSegment, ExtractResult, GenResult, InspectReport, SearchHit, ValidationReport
 from apt_rag.ocr import OcrUnavailableError, get_ocr_engine
 from apt_rag.pdfinspect import inspect_pdf_file
@@ -243,18 +244,19 @@ def generate_questions(
     seed: int = 42,
     model: str | None = None,
     force: bool = False,
-    client: object | None = None,
+    llm: LLM | None = None,
     on_progress: Callable[[int, int, Chunk, int | None], None] | None = None,
 ) -> GenResult:
     chunks_path = settings.index_dir / "chunks.json"
     if not chunks_path.exists():
         raise FileNotFoundError("색인이 없습니다. 먼저 index 실행: apt-rag index <pdf>")
     chunks = load_chunks(chunks_path)
-    client = client or OllamaClient(settings.ollama_url, model or settings.llm_model)
+    if llm is None:
+        llm = get_llm(dataclasses.replace(settings, llm_model=model) if model else settings)
     return generate(
         chunks,
         out=Path(out),
-        client=client,
+        llm=llm,
         count=count,
         per_article=per_article,
         parts=parts,

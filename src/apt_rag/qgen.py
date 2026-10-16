@@ -7,13 +7,16 @@ import re
 from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
-from apt_rag.llm import OllamaClient, OllamaConnectionError, OllamaError, OllamaModelMissingError  # noqa: F401  (재export)
+from apt_rag.llm import LLM
 from apt_rag.models import Chunk, GenResult, GeneratedQuestion
 
 QUOTES = "\"'“”‘’"
 MIN_QUESTION_CHARS = 8
 MAX_QUESTION_CHARS = 120
 MAX_TEXT_CHARS = 1500
+TEMPERATURE = 0.7
+MIN_MAX_TOKENS = 512
+TOKENS_PER_QUESTION = 160
 CSV_HEADER = ["question", "expected_article", "source_title", "source_pages"]
 _LEADING_MARK = re.compile(r"^\s*(?:\d+\s*[.)]|[-*•])\s*")
 _ARTICLE_NO = re.compile(r"제\s*\d+\s*조")
@@ -71,16 +74,13 @@ def select_chunks(
     return sorted(chosen, key=lambda c: c.seq)
 
 
-def build_messages(chunk: Chunk, per_article: int) -> list[dict]:
+def build_messages(chunk: Chunk, per_article: int) -> list[dict[str, str]]:
     user = (
         f"질문을 {per_article}개 만드세요.\n\n"
         f"[조항 머리말]\n{chunk.header}\n\n"
         f"[조항 본문]\n{chunk.text[:MAX_TEXT_CHARS]}"
     )
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user},
-    ]
+    return [{"role": "user", "content": user}]
 
 
 def parse_questions(content: str) -> list[str]:
@@ -125,7 +125,7 @@ def generate(
     chunks: Sequence[Chunk],
     *,
     out: Path,
-    client,
+    llm: LLM,
     count: int = 40,
     per_article: int = 1,
     parts: Collection[str] = ("본문",),
@@ -138,14 +138,21 @@ def generate(
     if out.exists() and not force:
         raise FileExistsError(f"이미 존재합니다: {out} (--force로 덮어쓰기)")
     selected = select_chunks(chunks, parts=parts, min_chars=min_chars, count=count, seed=seed)
-    client.check_model()
+    llm.check_model()
 
     questions: list[GeneratedQuestion] = []
     skipped: list[str] = []
     seen: set[str] = set()
     total = len(selected)
     for index, chunk in enumerate(selected, 1):
-        content = client.chat(build_messages(chunk, per_article), seed=seed)
+        content = llm.complete(
+            SYSTEM_PROMPT,
+            build_messages(chunk, per_article),
+            temperature=TEMPERATURE,
+            max_tokens=max(MIN_MAX_TOKENS, TOKENS_PER_QUESTION * per_article),
+            seed=seed,
+            json_mode=True,
+        )
         try:
             raw_questions = parse_questions(content)
         except ValueError:

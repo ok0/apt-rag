@@ -36,7 +36,11 @@ class LLM(Protocol):
         *,
         temperature: float = 0.0,
         max_tokens: int = 1024,
+        seed: int | None = None,
+        json_mode: bool = False,
     ) -> str: ...
+
+    def check_model(self) -> None: ...
 
 
 DEFAULT_NUM_CTX = 16384
@@ -92,16 +96,6 @@ class OllamaClient:
             ) from exc
         return response.get("message", {}).get("content", "")
 
-    def chat(self, messages: list[dict], seed: int) -> str:
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0.7, "seed": seed},
-        }
-        return self._post_chat(body)
-
     def complete(
         self,
         system: str,
@@ -109,6 +103,8 @@ class OllamaClient:
         *,
         temperature: float = 0.0,
         max_tokens: int = 1024,
+        seed: int | None = None,
+        json_mode: bool = False,
     ) -> str:
         body = {
             "model": self.model,
@@ -120,6 +116,10 @@ class OllamaClient:
                 "num_ctx": self.num_ctx,
             },
         }
+        if seed is not None:
+            body["options"]["seed"] = seed
+        if json_mode:
+            body["format"] = "json"
         return self._post_chat(body)
 
 
