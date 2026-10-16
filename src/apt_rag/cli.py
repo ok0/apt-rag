@@ -5,6 +5,7 @@ import dataclasses
 import json
 import sys
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 from apt_rag import __version__
@@ -12,7 +13,7 @@ from apt_rag.generation.answer import load_history
 from apt_rag.config import Settings, load_settings
 from apt_rag.ingest.ocr import OcrUnavailableError
 from apt_rag.generation.llm import LLMError
-from apt_rag.models import Chunk, page_range
+from apt_rag.models import AskEvalRow, Chunk, page_range
 from apt_rag.generation.qgen import split_parts
 from apt_rag.retrieval.search import Searcher
 from apt_rag.service import ASK_EVAL_CATEGORIES, answer, build_index, evaluate, evaluate_answers, generate_questions, inspect_pdf
@@ -243,8 +244,27 @@ def _cmd_eval_ask(args: argparse.Namespace) -> int:
         print(f"파일을 찾을 수 없습니다: {csv_path}", file=sys.stderr)
         return 1
     settings = _with_band_overrides(load_settings(), args)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    partial_path = settings.work_dir / "eval" / f"ask-eval-{stamp}.partial.jsonl"
+
+    def progress(index: int, total: int, row: AskEvalRow) -> None:
+        print(f"[{index}/{total}] {row.category} · {row.question[:40]}", file=sys.stderr, flush=True)
+
     try:
-        result = evaluate_answers(csv_path, settings, k=args.k, min_sim=args.min_sim)
+        result = evaluate_answers(
+            csv_path,
+            settings,
+            k=args.k,
+            min_sim=args.min_sim,
+            on_row=progress,
+            partial_path=partial_path,
+        )
+    except KeyboardInterrupt:
+        if partial_path.exists():
+            print(f"중단됨: 부분 결과 {partial_path}", file=sys.stderr, flush=True)
+        else:
+            print("중단됨", file=sys.stderr, flush=True)
+        return 130
     except (FileNotFoundError, ValueError, IndexMismatchError, LLMError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

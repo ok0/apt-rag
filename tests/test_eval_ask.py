@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from apt_rag.models import SearchHit
 from apt_rag.service import ASK_EVAL_CATEGORIES, evaluate_answers
 
@@ -84,3 +88,66 @@ def test_evaluate_answers_classifies_rows(settings, tmp_path):
     assert result.counts["unanswerable_refused"] == 1
     assert sum(result.counts.values()) == 3
     assert list((settings.work_dir / "eval").glob("ask-eval-*.json"))
+
+
+def test_evaluate_answers_reports_each_row(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+        }
+    )
+    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    seen = []
+
+    def on_row(index, total, row):
+        seen.append((index, total, row))
+
+    result = evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm, on_row=on_row)
+
+    assert [(i, total) for i, total, _ in seen] == [(1, 3), (2, 3), (3, 3)]
+    assert [row for _, _, row in seen] == result.rows
+
+
+def test_evaluate_answers_removes_partial_on_success(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+        }
+    )
+    llm = FakeLLM(["목줄을 해야 합니다 (제23조)", "점검 주기는 조항에 있습니다"])
+    evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
+
+    eval_dir = settings.work_dir / "eval"
+    assert not list(eval_dir.glob("ask-eval-*.partial.jsonl"))
+    assert list(eval_dir.glob("ask-eval-*.json"))
+
+
+class FailingSecondLLM(FakeLLM):
+    def complete(self, system, messages, *, temperature=0.0, max_tokens=1024):
+        if len(self.calls) >= 1:
+            raise RuntimeError("boom")
+        return super().complete(system, messages, temperature=temperature, max_tokens=max_tokens)
+
+
+def test_evaluate_answers_keeps_partial_on_failure(settings, tmp_path):
+    csv_path = write_csv(tmp_path / "ask.csv")
+    searcher = FakeSearcher(
+        {
+            "반려견 목줄은 필요한가요": [make_hit(1, "제23조")],
+            "엘리베이터 점검 주기는 어떻게 되나요": [make_hit(1, "제5조")],
+        }
+    )
+    llm = FailingSecondLLM(["목줄을 해야 합니다 (제23조)"])
+
+    with pytest.raises(RuntimeError):
+        evaluate_answers(csv_path, settings, k=5, searcher=searcher, llm=llm)
+
+    partials = list((settings.work_dir / "eval").glob("ask-eval-*.partial.jsonl"))
+    assert len(partials) == 1
+    lines = partials[0].read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["question"] == "반려견 목줄은 필요한가요"

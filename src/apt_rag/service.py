@@ -256,37 +256,47 @@ def evaluate_answers(
     min_sim: float | None = None,
     searcher: Searcher | None = None,
     llm: LLM | None = None,
+    on_row: Callable[[int, int, AskEvalRow], None] | None = None,
+    partial_path: Path | None = None,
 ) -> AskEvalResult:
     searcher = searcher or Searcher(settings)
     llm = llm or get_llm(settings)
+    questions = list(load_questions(Path(csv_path)))
+    total = len(questions)
+    out_dir = settings.work_dir / "eval"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if partial_path is None:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        partial_path = out_dir / f"ask-eval-{stamp}.partial.jsonl"
+    final_path = partial_path.with_name(partial_path.name.removesuffix(".partial.jsonl") + ".json")
     rows: list[AskEvalRow] = []
-    for question, cell in load_questions(Path(csv_path)):
-        expected = parse_expected(cell)
-        res = answer(question, settings, top_n=k, min_sim=min_sim, searcher=searcher, llm=llm)
-        refused = NOT_FOUND_MARK in res.answer and not res.cited_refs
-        if not expected:
-            category = "unanswerable_refused" if refused else "unanswerable_answered"
-            gold_rank = None
-        else:
-            nocut = searcher.search(question, top_n=50, min_sim=0)
-            gold_rank = next(
-                (i for i, h in enumerate(nocut, 1) if normalize_ref(h.article_ref) in expected),
-                None,
-            )
-            hit_n = {normalize_ref(h.article_ref) for h in res.hits}
-            cited_n = {normalize_ref(r) for r in res.cited_refs}
-            if any(e in cited_n for e in expected):
-                category = "cited"
-            elif any(e in hit_n for e in expected):
-                category = "retrieved_not_cited"
-            elif gold_rank is None:
-                category = "not_in_candidates"
-            elif gold_rank <= k:
-                category = "cut_by_min_sim"
+    with partial_path.open("w", encoding="utf-8") as partial:
+        for i, (question, cell) in enumerate(questions, 1):
+            expected = parse_expected(cell)
+            res = answer(question, settings, top_n=k, min_sim=min_sim, searcher=searcher, llm=llm)
+            refused = NOT_FOUND_MARK in res.answer and not res.cited_refs
+            if not expected:
+                category = "unanswerable_refused" if refused else "unanswerable_answered"
+                gold_rank = None
             else:
-                category = "rank_beyond_k"
-        rows.append(
-            AskEvalRow(
+                nocut = searcher.search(question, top_n=50, min_sim=0)
+                gold_rank = next(
+                    (i for i, h in enumerate(nocut, 1) if normalize_ref(h.article_ref) in expected),
+                    None,
+                )
+                hit_n = {normalize_ref(h.article_ref) for h in res.hits}
+                cited_n = {normalize_ref(r) for r in res.cited_refs}
+                if any(e in cited_n for e in expected):
+                    category = "cited"
+                elif any(e in hit_n for e in expected):
+                    category = "retrieved_not_cited"
+                elif gold_rank is None:
+                    category = "not_in_candidates"
+                elif gold_rank <= k:
+                    category = "cut_by_min_sim"
+                else:
+                    category = "rank_beyond_k"
+            row = AskEvalRow(
                 question=question,
                 expected=expected,
                 category=category,
@@ -297,17 +307,17 @@ def evaluate_answers(
                 refused=refused,
                 answer=res.answer,
             )
-        )
+            rows.append(row)
+            partial.write(json.dumps(asdict(row), ensure_ascii=False) + "\n")
+            partial.flush()
+            if on_row is not None:
+                on_row(i, total, row)
     counts = {name: 0 for name in ASK_EVAL_CATEGORIES}
     for row in rows:
         counts[row.category] += 1
     result = AskEvalResult(k=k, total=len(rows), counts=counts, rows=rows)
-    out_dir = settings.work_dir / "eval"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    (out_dir / f"ask-eval-{stamp}.json").write_text(
-        json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    final_path.write_text(json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8")
+    partial_path.unlink()
     return result
 
 
