@@ -240,3 +240,16 @@ def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None
             if i not in matched:
                 matched.append(i)
     return sorted(matched)
+
+
+_FOREIGN_RUN = re.compile(r"[぀-ヺー-ヿ㐀-䶿一-鿿\uf900-\ufaff]+")
+_LATIN_RUN = re.compile(r"[A-Za-z]{2,}")
+LATIN_ALLOW = frozenset({"kw", "kwh", "km", "cm", "mm", "kg", "tv", "cctv", "led", "no"})
+
+
+def foreign_tokens(text: str, hits: Sequence[SearchHit]) -> list[str]:
+    context = "\n".join(f"{h.article_ref}\n{h.title}\n{h.text}" for h in hits)
+    context_latin = {w.lower() for w in _LATIN_RUN.findall(context)}
+    found = [run for run in _FOREIGN_RUN.findall(text) if run not in context]
+    found += [w for w in _LATIN_RUN.findall(text) if w.lower() not in LATIN_ALLOW and w.lower() not in context_latin]
+    return list(dict.fromkeys(found))

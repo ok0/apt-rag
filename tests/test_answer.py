@@ -10,6 +10,7 @@ from apt_rag.generation.answer import (
     NOT_FOUND_MARK,
     REWRITE_SYSTEM_PROMPT,
     check_citations,
+    foreign_tokens,
     load_history,
     match_evidence,
     parse_answer_json,
@@ -396,3 +397,27 @@ def test_match_evidence_returns_matched_indices():
     ]
     evidence = "첫 번째 조항의 내용입니다.\n세 번째 조항의 내용입니다."
     assert match_evidence(evidence, hits) == [0, 2]
+
+
+def test_foreign_tokens_detects_chinese():
+    assert foreign_tokens("不允许在晚上 10시 이후 사용합니다", [make_hit(1, "제1조")]) == ["不允许在晚上"]
+
+
+def test_foreign_tokens_detects_latin_word():
+    assert foreign_tokens("NIGHT 11시", [make_hit(1, "제1조")]) == ["NIGHT"]
+
+
+def test_foreign_tokens_allows_latin_in_context():
+    hit = make_hit(1, "제1조", text="CCTV를 설치합니다")
+    assert foreign_tokens("CCTV로 확인합니다", [hit]) == []
+
+
+def test_foreign_tokens_allows_units_and_ignores_middle_dot():
+    assert foreign_tokens("전력은 3kW 이고 면적은 84m²입니다", [make_hit(1, "제1조")]) == []
+    assert foreign_tokens("관리・운영", [make_hit(1, "제1조")]) == []
+
+
+def test_foreign_tokens_allows_char_in_context():
+    hit = make_hit(1, "제1조", text="후문은 야간에 잠근다")
+    assert foreign_tokens("후문은 야간에 잠근다", [hit]) == []
+    assert foreign_tokens("後門은 야간에 잠근다", [hit]) == ["後門"]
