@@ -171,6 +171,7 @@ class AskEvalRow:
     answerable: bool | None = None
     evidence: str = ""
     attempts: list[dict[str, str]] = field(default_factory=list)  # 생성 시도별 {"result": ok|parse|unanswerable|refusal|evidence+citation…, "evidence": ...}
+    outcome: str = ""  # ASK_EVAL_OUTCOMES 중 하나 (service.classify_outcome)
 
 
 @dataclass
@@ -180,6 +181,7 @@ class AskEvalResult:
     counts: dict[str, int]
     rows: list[AskEvalRow]
     model: str = ""
+    summary: dict = field(default_factory=dict)
 
 
 @dataclass

@@ -250,6 +250,58 @@ ASK_EVAL_CATEGORIES = (
     "unanswerable_refused",
     "unanswerable_answered",
 )
+ANSWERABLE_OUTCOMES = (
+    "correct_cited",
+    "false_refusal",
+    "wrong_citation",
+    "fallback",
+    "uncited_answer",
+    "search_miss",
+)
+UNANSWERABLE_OUTCOMES = ("correct_refusal", "answered_unanswerable")
+ASK_EVAL_OUTCOMES = ANSWERABLE_OUTCOMES + UNANSWERABLE_OUTCOMES
+
+
+def classify_outcome(row: AskEvalRow) -> str:
+    if not row.expected:
+        return "correct_refusal" if row.refused else "answered_unanswerable"
+    if row.category == "cited":
+        return "correct_cited"
+    if row.category != "retrieved_not_cited":
+        return "search_miss"
+    if row.fallback:
+        return "fallback"
+    if row.answerable is False or row.refused:
+        return "false_refusal"
+    if row.cited_refs:
+        return "wrong_citation"
+    return "uncited_answer"
+
+
+def _rate(n: int, d: int) -> float | None:
+    return round(n / d, 4) if d else None
+
+
+def summarize_ask_eval(rows: Sequence[AskEvalRow]) -> dict:
+    ans = [r for r in rows if r.expected]
+    una = [r for r in rows if not r.expected]
+    a_counts = {name: sum(r.outcome == name for r in ans) for name in ANSWERABLE_OUTCOMES}
+    u_counts = {name: sum(r.outcome == name for r in una) for name in UNANSWERABLE_OUTCOMES}
+    refused = sum(r.refused for r in rows)
+    answerable_refused = sum(r.refused for r in ans)
+    return {
+        "answerable_total": len(ans),
+        "answerable_outcomes": a_counts,
+        "correct_cited_rate": _rate(a_counts["correct_cited"], len(ans)),
+        "unanswerable_total": len(una),
+        "unanswerable_outcomes": u_counts,
+        "correct_refusal_rate": _rate(u_counts["correct_refusal"], len(una)),
+        "answered_unanswerable_rate": _rate(u_counts["answered_unanswerable"], len(una)),
+        "refused": refused,
+        "refusal_rate": _rate(refused, len(rows)),
+        "answerable_refused": answerable_refused,
+        "answerable_refusal_rate": _rate(answerable_refused, len(ans)),
+    }
 
 
 def safe_model_name(model: str) -> str:
@@ -323,6 +375,7 @@ def evaluate_answers(
                 evidence=res.evidence,
                 attempts=list(res.attempts),
             )
+            row.outcome = classify_outcome(row)
             rows.append(row)
             partial.write(json.dumps(asdict(row), ensure_ascii=False) + "\n")
             partial.flush()
@@ -331,7 +384,9 @@ def evaluate_answers(
     counts = {name: 0 for name in ASK_EVAL_CATEGORIES}
     for row in rows:
         counts[row.category] += 1
-    result = AskEvalResult(model=settings.llm_model, k=k, total=len(rows), counts=counts, rows=rows)
+    result = AskEvalResult(
+        model=settings.llm_model, k=k, total=len(rows), counts=counts, rows=rows, summary=summarize_ask_eval(rows)
+    )
     final_path.write_text(json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8")
     partial_path.unlink()
     return result
