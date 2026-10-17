@@ -780,6 +780,10 @@ def test_answer_records_attempts(settings):
     assert result.attempts[0]["evidence"] == "전혀 다른 문장입니다 본문 아님"
 
 
+def test_answer_prompt_maps_tenant_terms_to_legal_terms():
+    assert "세입자·임차인·월세입자는 '사용자'" in ANSWER_SYSTEM_PROMPT
+
+
 def test_answer_prompt_has_multi_article_rule():
     assert "누가 누구에게 무엇을 하는지" in ANSWER_SYSTEM_PROMPT
     assert "앞에 놓인 조항이 정답이라는 보장은 없으니" in ANSWER_SYSTEM_PROMPT
