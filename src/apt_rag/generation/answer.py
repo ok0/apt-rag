@@ -381,6 +381,7 @@ LIST_TAIL_MIN_CHARS = 4
 _LIST_HEAD = re.compile(r"다음\s*각\s*호")
 _LIST_ITEM = re.compile(r"^\s*\d+\.\s*(\S.*)$")
 _LIST_JOSA = "을를이가은는"
+_PAREN = re.compile(r"\([^()]*\)")
 
 
 @dataclass
@@ -416,6 +417,21 @@ def parse_answer_json(raw: str) -> AnswerDraft | None:
 
 def normalize_for_match(s: str) -> str:
     return _NORM_DROP.sub("", s).lower()
+
+
+def strip_parentheticals(s: str) -> str:
+    prev = None
+    while prev != s:
+        prev, s = s, _PAREN.sub("", s)
+    return s
+
+
+def _match_without_parens(seg: str, normed: list[str], bare: list[str]) -> list[int]:
+    core = normalize_for_match(strip_parentheticals(seg))
+    if len(core) < MIN_EVIDENCE_CHARS:
+        return []
+    inner = [normalize_for_match(m.group(0)) for m in _PAREN.finditer(seg)]
+    return [i for i in range(len(normed)) if core in bare[i] and all(x in normed[i] for x in inner)]
 
 
 def _list_blocks(text: str) -> list[tuple[str, str, list[str]]]:
@@ -456,20 +472,23 @@ def _matches_list_item(seg: str, blocks: list[tuple[str, str, list[str]]]) -> bo
 
 def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None:
     normed = [normalize_for_match(h.text) for h in hits]
+    bare = [normalize_for_match(strip_parentheticals(h.text)) for h in hits]
     lists = [_list_blocks(h.text) for h in hits]
-    segs = []
+    segs: list[tuple[str, str]] = []
     for raw in _SEG_SPLIT.split(evidence):
         seg = _TRAIL_REF.sub("", _LEAD_REF.sub("", raw))
         n = normalize_for_match(seg)
         if len(n) >= MIN_EVIDENCE_CHARS:
-            segs.append(n)
+            segs.append((seg, n))
     if not segs:
         return None
     matched: list[int] = []
-    for n in segs:
+    for seg, n in segs:
         idx = [i for i, h in enumerate(normed) if n in h]
         if not idx:
             idx = [i for i, blocks in enumerate(lists) if _matches_list_item(n, blocks)]
+        if not idx:
+            idx = _match_without_parens(seg, normed, bare)
         if not idx:
             return None
         for i in idx:

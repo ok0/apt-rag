@@ -454,6 +454,38 @@ def test_match_evidence_list_item_returns_hit_with_list():
     assert match_evidence(LIST_MERGED_PIANO, hits) == [1]
 
 
+PAREN_TEXT = "① 관리주체는 승인받은 예산에 따라 관리비등(관리비와 사용료를 말한다)을 집행한다."
+
+
+def test_match_evidence_accepts_dropped_parenthetical():
+    hit = make_hit(1, "제7조", text=PAREN_TEXT)
+    assert match_evidence("관리주체는 승인받은 예산에 따라 관리비등을 집행한다.", [hit]) == [0]
+
+
+def test_match_evidence_accepts_partially_kept_parentheticals():
+    hit = make_hit(1, "제7조", text="회장은 회의(정기회의를 말한다)를 소집하고 결과(의결 사항을 포함한다)를 공개한다.")
+    assert match_evidence("회장은 회의(정기회의를 말한다)를 소집하고 결과를 공개한다.", [hit]) == [0]
+    assert match_evidence("회장은 회의를 소집하고 결과를 공개한다.", [hit]) == [0]
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "관리주체는 승인받은 예산에 따라 관리비등(월 10만원 한도)을 집행한다.",
+        "관리주체는 승인받은 예산에 따라 관리비등(관리비를 말한다)을 집행한다.",
+        "관리주체는 관리비등을 집행한다.",
+    ],
+)
+def test_match_evidence_rejects_altered_parenthetical_or_dropped_clause(evidence):
+    hit = make_hit(1, "제7조", text=PAREN_TEXT)
+    assert match_evidence(evidence, [hit]) is None
+
+
+def test_match_evidence_parenthetical_match_returns_hit_index():
+    hits = [make_hit(1, "제1조", text="첫 번째 조항의 내용입니다."), make_hit(2, "제7조", text=PAREN_TEXT)]
+    assert match_evidence("관리주체는 승인받은 예산에 따라 관리비등을 집행한다.", hits) == [1]
+
+
 def test_foreign_tokens_detects_chinese():
     assert foreign_tokens("不允许在晚上 10시 이후 사용합니다", [make_hit(1, "제1조")]) == ["不允许在晚上"]
 
