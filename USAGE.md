@@ -31,8 +31,34 @@ uv run apt-rag gen-questions [--count 40] [--per-article 1] [--out eval/generate
 - `search`: 색인에서 질의에 맞는 조항을 검색합니다. 결과의 `vec #N sim=0.xx`는 벡터 코사인 유사도입니다. `--min-sim`(기본 0.55, `APT_RAG_MIN_VEC_SIM`으로 변경 가능)보다 낮은 벡터 후보는 버리며, `0`이면 컷오프를 끕니다. 벡터 후보가 하나도 기준을 넘지 못하면 완화 구간(`--sim-band`, `--band-top-k`, 아래 절 참고)을 적용합니다. 구간에 드는 조항만 결과로 살리며, 이때 결과 항목은 `구간통과`로 표시되고 안내문이 함께 출력됩니다(`--json`에서는 `via_band: true`). 살릴 조항이 없으면 결과를 비워 `관련 조항을 찾지 못했습니다.`를 출력합니다. 벡터 후보가 하나라도 남으면 BM25와 RRF로 융합합니다. 질의가 동의어 사전과 일치하면 빠진 동의어를 덧붙인 확장 질의로 벡터 검색을 한 번 더 하며, 확장 질의 유사도는 컷오프 이상일 때만 반영합니다(아래 '동의어 사전' 절). `0`이면 이 규칙도 함께 꺼지고 BM25 단독 결과도 나옵니다.
 - `ask`: 검색된 조항을 근거로 LLM이 답변합니다. 자세한 내용은 아래 '답변 생성 (ask)' 절을 참고하세요.
 - `eval`: 질문 CSV로 hit@k 검색 적중률을 측정합니다. 컷오프로 결과가 비면 실패로 집계합니다. CSV는 UTF-8이며 `question,expected_article` 컬럼이 필요합니다. 정답 조문이 여러 개면 `;`로 구분하며, 상위 k개 중 하나라도 맞으면 적중입니다. 샘플은 `eval/sample_questions.csv`(15문항)이고, 실제 평가용 30~50문항은 같은 형식으로 작성합니다.
-- `eval-ask`: 질문마다 `ask`와 같은 답변을 만든 뒤, 검색과 생성 중 어디서 실패했는지 분류합니다. 입력 CSV는 `eval`과 같습니다. 정답이 빈 행은 "규약에 없는 질문"으로 취급합니다. 분류는 아래 표 순서로 판정하며, 첫 줄 건수 요약과 함께 `cited`, `unanswerable_refused`가 아닌 문항만 목록으로 출력합니다.
-  진행 상황은 stderr에 `[i/N] 분류 · 질문 앞 40자`로 한 줄씩 표시되며(`--json`의 stdout에는 섞이지 않습니다). 행마다 `work_dir/eval/ask-eval-{모델}-{시각}.partial.jsonl`에 기록되고, 끝까지 완료되면 `ask-eval-{모델}-{시각}.json`으로 저장된 뒤 partial 파일은 삭제됩니다. `{모델}`은 `llm_model`에서 영숫자·`.`·`-`·`_` 외의 문자를 `_`로 바꾼 값입니다(예: `qwen2.5_7b`). 중단(Ctrl+C)하거나 오류로 끊기면 partial 파일이 남아 그때까지의 결과를 확인할 수 있습니다.
+- `eval-ask`: 질문마다 `ask`와 같은 답변을 만든 뒤 질문을 두 그룹으로 나눠 보고합니다. 정답이 있는 행은 "규약에 있는 질문", 빈 행은 "규약에 없는 질문"입니다. 입력 CSV는 `eval`과 같습니다.
+  - 최우선 지표는 규약에 있는 질문 중 정답 조항을 인용해 답한 비율(`정답 조항 인용 답변`)입니다.
+  - 규약에 없는 질문은 올바르게 거절한 비율과 엉뚱하게 답한 비율을 봅니다.
+  - 거절률은 `참고` 줄의 부수 지표입니다. 거절이 많다고 좋은 결과가 아닙니다. 규약에 있는 질문을 거절하면 오거절로 셉니다.
+  - 마지막에 실패 행을 유형 순서(오거절 → 오인용 → 근거 미검증 대체 → 인용 없는 답변 → 검색 실패 → 엉뚱한 답변)로 나열합니다. 각 줄에는 인용 조항, 생성 시도 결과(`시도: evidence→unanswerable`), 정답 순위, 근거 조항이 들어갑니다. 프롬프트 개선 전후 비교에 쓰세요.
+  진행 상황은 stderr에 `[i/N] 답변 결과(outcome) · 질문 앞 40자`로 한 줄씩 표시되며(`--json`의 stdout에는 섞이지 않습니다). 행마다 `work_dir/eval/ask-eval-{모델}-{시각}.partial.jsonl`에 기록되고, 끝까지 완료되면 `ask-eval-{모델}-{시각}.json`으로 저장된 뒤 partial 파일은 삭제됩니다. `{모델}`은 `llm_model`에서 영숫자·`.`·`-`·`_` 외의 문자를 `_`로 바꾼 값입니다(예: `qwen2.5_7b`). 중단(Ctrl+C)하거나 오류로 끊기면 partial 파일이 남아 그때까지의 결과를 확인할 수 있습니다.
+
+답변 결과(outcome):
+
+| outcome | 그룹 | 의미 |
+|---|---|---|
+| `correct_cited` | 규약에 있음 | 정답 조항을 인용함 (다른 조항을 함께 인용해도 성공) |
+| `search_miss` | 규약에 있음 | 정답 조항이 검색 결과(LLM에 준 조항)에 없음. 세부 원인은 `category`(`rank_beyond_k`/`cut_by_min_sim`/`not_in_candidates`) |
+| `fallback` | 규약에 있음 | 정답이 검색 결과에 있으나 근거·인용 검증에 두 번 실패해 거절 문구로 대체됨(`fallback` 필드) |
+| `false_refusal` | 규약에 있음 | 정답이 검색 결과에 있으나 LLM이 answerable=false로 하거나(재시도 후 포함) 거절 문구로 답함 (오거절) |
+| `wrong_citation` | 규약에 있음 | 정답이 검색 결과에 있으나 다른 조항만 인용함 (오인용) |
+| `uncited_answer` | 규약에 있음 | 거절도 인용도 없는 답변 (방어용 분류) |
+| `correct_refusal` | 규약에 없음 | 거절함 (검색 결과가 없어 고정 문구를 낸 경우 포함) |
+| `answered_unanswerable` | 규약에 없음 | 내용을 답함 |
+
+`--json`과 결과 파일에는 행마다 `outcome`이 붙고, 최상위 `summary`에 다음 필드가 들어갑니다.
+- `answerable_total`, `answerable_outcomes`, `correct_cited_rate`
+- `unanswerable_total`, `unanswerable_outcomes`, `correct_refusal_rate`, `answered_unanswerable_rate`
+- `refused`, `refusal_rate`, `answerable_refused`, `answerable_refusal_rate`
+
+비율은 소수 4자리이고, 분모가 0이면 `null`입니다.
+
+기존 분류(`category`, `counts`)도 그대로 저장되며 리포트에는 `기존 분류:` 한 줄로 나옵니다.
 
 | 분류 | 의미 |
 |---|---|
