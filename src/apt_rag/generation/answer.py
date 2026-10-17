@@ -375,7 +375,7 @@ def check_citations(answer: str, hits: Sequence[SearchHit]) -> tuple[list[str], 
 MIN_EVIDENCE_CHARS = 8
 _NORM_DROP = re.compile(r"[^0-9A-Za-z가-힣㐀-䶿一-鿿]")
 _SEG_SPLIT = re.compile(r"\n+|…|\.{3,}|(?<=\.)\s+")
-_LEAD_REF = re.compile(r"^\s*[(\[]?\s*(?:별표\s*\d+|별지\s*제\s*\d+(?:-\d+)?\s*호\s*서식|(?:별첨\s*\d+\s*|부칙\s*)?제\s*\d+\s*조(?:\s*의\s*\d+)?(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?)\s*[)\]]?\s*[:：]?\s*")
+_LEAD_REF = re.compile(r"^\s*(?:[①-⑳]\s*)?[(\[]?\s*(?:(?:법|영|규칙|시행령|시행규칙)\s+)?(?:별표\s*\d+|별지\s*제\s*\d+(?:-\d+)?\s*호\s*서식|(?:별첨\s*\d+\s*|부칙\s*)?제\s*\d+\s*조(?:\s*의\s*\d+)?(?:\s*제\s*\d+\s*항)?(?:\s*제\s*\d+\s*호)?(?:\s*[가-하]\s*목?(?=[\s.)\]:：]|$))?)\s*[)\]]?\s*[.:：]?\s*")
 _TRAIL_REF = re.compile(r"\s*\((?:별표|별지|별첨|부칙|제\s*\d)[^)]*\)\s*\.?\s*$")
 LIST_TAIL_MIN_CHARS = 4
 _LIST_HEAD = re.compile(r"다음\s*각\s*호")

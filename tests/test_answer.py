@@ -486,6 +486,12 @@ def test_match_evidence_parenthetical_match_returns_hit_index():
     assert match_evidence("관리주체는 승인받은 예산에 따라 관리비등을 집행한다.", hits) == [1]
 
 
+def test_match_evidence_ignores_label_only_segment():
+    hit = make_hit(1, "제7조", text=PAREN_TEXT)
+    assert match_evidence("① 규칙 제2조제1항제4호가.\n관리주체는 승인받은 예산에 따라 관리비등", [hit]) == [0]
+    assert match_evidence("① 규칙 제2조제1항제4호가.", [hit]) is None
+
+
 def test_foreign_tokens_detects_chinese():
     assert foreign_tokens("不允许在晚上 10시 이후 사용합니다", [make_hit(1, "제1조")]) == ["不允许在晚上"]
 
