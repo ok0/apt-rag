@@ -1,11 +1,14 @@
+import json
+
 import pytest
 
 import apt_rag.cli as cli
 from apt_rag.generation.answer import DISCLAIMER, NO_HIT_ANSWER
 from apt_rag.cli import main
 from apt_rag.generation.llm import OllamaConnectionError
-from apt_rag.models import AnswerResult, ChatTurn, SearchHit
+from apt_rag.models import AnswerResult, AskEvalResult, AskEvalRow, ChatTurn, SearchHit
 from apt_rag.retrieval.store import IndexMismatchError
+from apt_rag.service import classify_outcome, summarize_ask_eval
 
 
 def test_help_exits_zero():
@@ -305,3 +308,83 @@ def test_ask_prints_original_and_rewritten_question(monkeypatch, capsys, setting
     out = capsys.readouterr().out
     assert "[질문 원본] 그럼 몇 마리까지 돼요?" in out
     assert "[LLM 보정 질문] 반려동물은 몇 마리까지 키울 수 있나요?" in out
+
+
+def _ask_eval_result():
+    rows = [
+        AskEvalRow(
+            question="목줄 필요?",
+            expected=["제23조"],
+            category="cited",
+            gold_rank=1,
+            hits=["제23조"],
+            cited_refs=["제23조"],
+            unverified_refs=[],
+            refused=False,
+            answer="a",
+            answerable=True,
+            attempts=[{"result": "ok", "evidence": "e"}],
+        ),
+        AskEvalRow(
+            question="폭언해도 되나요",
+            expected=["제23조"],
+            category="retrieved_not_cited",
+            gold_rank=2,
+            hits=["제22조", "제23조"],
+            cited_refs=[],
+            unverified_refs=[],
+            refused=True,
+            answer="x",
+            answerable=False,
+            attempts=[{"result": "evidence", "evidence": "e"}, {"result": "unanswerable", "evidence": ""}],
+        ),
+        AskEvalRow(
+            question="우주선 비용",
+            expected=[],
+            category="unanswerable_refused",
+            gold_rank=None,
+            hits=[],
+            cited_refs=[],
+            unverified_refs=[],
+            refused=True,
+            answer="x",
+        ),
+    ]
+    for row in rows:
+        row.outcome = classify_outcome(row)
+    return AskEvalResult(
+        k=5,
+        total=3,
+        counts={c: 0 for c in cli.ASK_EVAL_CATEGORIES} | {"cited": 1, "retrieved_not_cited": 1, "unanswerable_refused": 1},
+        rows=rows,
+        model="fake",
+        summary=summarize_ask_eval(rows),
+    )
+
+
+def test_eval_ask_reports_groups_and_failures(monkeypatch, capsys, settings, tmp_path):
+    csv = tmp_path / "q.csv"
+    csv.write_text("question,expected_article\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "evaluate_answers", lambda *a, **kw: _ask_eval_result())
+    assert main(["eval-ask", str(csv)]) == 0
+    out = capsys.readouterr().out
+    assert "정답 조항 인용 답변: 1/2 (50.0%)" in out
+    assert "오거절(false_refusal) 1" in out
+    assert "올바른 거절: 1/1 (100.0%)" in out
+    assert "참고: 전체 거절률 2/3 (66.7%)" in out
+    assert "- [false_refusal] Q: 폭언해도 되나요" in out
+    assert "시도: evidence→unanswerable" in out
+    assert "우주선 비용" not in out
+    assert "목줄 필요?" not in out
+
+
+def test_eval_ask_json_includes_summary_and_outcome(monkeypatch, capsys, settings, tmp_path):
+    csv = tmp_path / "q.csv"
+    csv.write_text("question,expected_article\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+    monkeypatch.setattr(cli, "evaluate_answers", lambda *a, **kw: _ask_eval_result())
+    assert main(["eval-ask", str(csv), "--json"]) == 0
+    out = capsys.readouterr().out
+    assert json.loads(out)["summary"]["answerable_outcomes"]["false_refusal"] == 1
+    assert json.loads(out)["rows"][1]["outcome"] == "false_refusal"

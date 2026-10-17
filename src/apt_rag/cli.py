@@ -15,7 +15,7 @@ from apt_rag.generation.llm import LLMError
 from apt_rag.models import AskEvalRow, Chunk, page_range
 from apt_rag.generation.qgen import split_parts
 from apt_rag.retrieval.search import Searcher
-from apt_rag.service import ASK_EVAL_CATEGORIES, answer, build_index, evaluate, evaluate_answers, generate_questions, inspect_pdf, new_ask_eval_partial_path
+from apt_rag.service import ANSWERABLE_OUTCOMES, ASK_EVAL_CATEGORIES, ASK_EVAL_OUTCOMES, answer, build_index, evaluate, evaluate_answers, generate_questions, inspect_pdf, new_ask_eval_partial_path
 from apt_rag.retrieval.store import IndexMismatchError
 
 
@@ -28,6 +28,20 @@ SIM_BAND_HELP = (
 )
 BAND_TOP_K_HELP = "완화 구간의 '상위' 기준 순위 (기본 APT_RAG_BAND_TOP_K 또는 20)"
 BAND_NOTICE = "참고: 벡터 유사도가 기준에 조금 못 미치지만, 벡터와 BM25가 모두 상위에 올린 조항이 있어 결과를 표시합니다."
+OUTCOME_LABELS = {
+    "correct_cited": "정답 인용",
+    "false_refusal": "오거절",
+    "wrong_citation": "오인용",
+    "fallback": "근거 미검증 대체",
+    "uncited_answer": "인용 없는 답변",
+    "search_miss": "검색 실패",
+    "correct_refusal": "올바른 거절",
+    "answered_unanswerable": "엉뚱한 답변",
+}
+
+
+def _ratio(n: int, d: int) -> str:
+    return f"{n}/{d} ({n / d:.1%})" if d else f"{n}/{d} (-)"
 
 
 def _add_filter_args(parser: argparse.ArgumentParser) -> None:
@@ -246,7 +260,7 @@ def _cmd_eval_ask(args: argparse.Namespace) -> int:
     partial_path = new_ask_eval_partial_path(settings)
 
     def progress(index: int, total: int, row: AskEvalRow) -> None:
-        print(f"[{index}/{total}] {row.category} · {row.question[:40]}", file=sys.stderr, flush=True)
+        print(f"[{index}/{total}] {row.outcome} · {row.question[:40]}", file=sys.stderr, flush=True)
 
     try:
         result = evaluate_answers(
@@ -269,15 +283,30 @@ def _cmd_eval_ask(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
         return 0
-    print(f"분류별 건수 (model={result.model}, k={result.k}, 총 {result.total}문항):")
-    for category in ASK_EVAL_CATEGORIES:
-        print(f"- {category}: {result.counts[category]}")
-    for row in result.rows:
-        if row.category in ("cited", "unanswerable_refused"):
-            continue
+    s = result.summary
+    a_total, a_counts = s["answerable_total"], s["answerable_outcomes"]
+    u_total, u_counts = s["unanswerable_total"], s["unanswerable_outcomes"]
+    print(f"답변 평가 (model={result.model}, k={result.k}, 총 {result.total}문항)")
+    print(f"[규약에 있는 질문] {a_total}문항")
+    print(f"- 정답 조항 인용 답변: {_ratio(a_counts['correct_cited'], a_total)}")
+    print("- 실패: " + ", ".join(
+        f"{OUTCOME_LABELS[name]}({name}) {a_counts[name]}" for name in ANSWERABLE_OUTCOMES if name != "correct_cited"
+    ))
+    print(f"[규약에 없는 질문] {u_total}문항")
+    print(f"- 올바른 거절: {_ratio(u_counts['correct_refusal'], u_total)}")
+    print(f"- 엉뚱한 답변: {_ratio(u_counts['answered_unanswerable'], u_total)}")
+    print(f"참고: 전체 거절률 {_ratio(s['refused'], result.total)}, 규약에 있는 질문 중 거절 {_ratio(s['answerable_refused'], a_total)}")
+    print("기존 분류: " + ", ".join(f"{c} {result.counts[c]}" for c in ASK_EVAL_CATEGORIES))
+    failure_order = [n for n in ASK_EVAL_OUTCOMES if n not in ("correct_cited", "correct_refusal")]
+    failures = [row for name in failure_order for row in result.rows if row.outcome == name]
+    if failures:
+        print(f"실패 {len(failures)}건:")
+    for row in failures:
+        label = f"search_miss:{row.category}" if row.outcome == "search_miss" else row.outcome
         print(
-            f"- [{row.category}] Q: {row.question} / 정답: {', '.join(row.expected) or '(없음)'} / "
-            f"정답 순위(컷오프 없음): {row.gold_rank or '-'} / 근거: {', '.join(row.hits)}"
+            f"- [{label}] Q: {row.question} / 정답: {', '.join(row.expected) or '(없음)'} / "
+            f"인용: {', '.join(row.cited_refs) or '(없음)'} / 시도: {'→'.join(a['result'] for a in row.attempts) or '-'} / "
+            f"정답 순위(컷오프 없음): {row.gold_rank or '-'} / 근거: {', '.join(row.hits) or '(없음)'}"
         )
     print(f"저장: {settings.work_dir / 'eval'}")
     return 0
