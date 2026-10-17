@@ -659,7 +659,7 @@ def test_answer_sends_schema_and_few_shot_messages(settings):
 
 
 def test_few_shot_assistant_turns_are_valid():
-    assert len(FEW_SHOT) == 8
+    assert len(FEW_SHOT) == 10
     for i in range(0, len(FEW_SHOT), 2):
         user, assistant = FEW_SHOT[i], FEW_SHOT[i + 1]
         assert user["role"] == "user"
@@ -668,10 +668,24 @@ def test_few_shot_assistant_turns_are_valid():
         assert draft is not None
         assert list(json.loads(assistant["content"]).keys()) == ["answerable", "evidence", "answer"]
         if draft.answerable:
-            body = re.search(r"<조항[^>]*>\n(.*?)\n</조항>", user["content"], re.S)
-            assert body is not None
-            hit = make_hit(1, "예시", text=body.group(1))
-            assert match_evidence(draft.evidence, [hit]) is not None
+            bodies = re.findall(r"<조항[^>]*>\n(.*?)\n</조항>", user["content"], re.S)
+            assert bodies
+            hits = [make_hit(j + 1, "예시", text=b) for j, b in enumerate(bodies)]
+            assert match_evidence(draft.evidence, hits) is not None
+
+
+def test_few_shot_has_multi_article_example_citing_non_first():
+    found = False
+    for i in range(0, len(FEW_SHOT), 2):
+        bodies = re.findall(r"<조항[^>]*>\n(.*?)\n</조항>", FEW_SHOT[i]["content"], re.S)
+        draft = parse_answer_json(FEW_SHOT[i + 1]["content"])
+        assert draft is not None
+        if len(bodies) >= 2 and draft.answerable:
+            hits = [make_hit(j + 1, "예시", text=b) for j, b in enumerate(bodies)]
+            matched = match_evidence(draft.evidence, hits)
+            assert matched is not None and 0 not in matched
+            found = True
+    assert found
 
 
 def test_few_shot_citations_are_canaries():
