@@ -62,3 +62,24 @@ def test_repo_seed_maps_pet_words_to_gachuk():
     syn = load_synonyms(Path(__file__).parents[1] / "synonyms.txt")
     for q in ("반려동물 키워도 되나요", "강아지 키워도 되나요", "반려견 키워도 되나요", "고양이 키워도 되나요"):
         assert "가축" in syn.expand_tokens(tokenize(q))
+
+
+def test_expansion_terms_returns_missing_members():
+    assert Synonyms([["베란다", "발코니"]]).expansion_terms(["베란다", "수선"]) == ["발코니"]
+
+
+def test_expansion_terms_empty_when_all_present_or_no_match():
+    syn = Synonyms([["베란다", "발코니"]])
+    assert syn.expansion_terms(["베란다", "발코니"]) == []
+    assert syn.expansion_terms(["주차장"]) == []
+
+
+def test_expansion_terms_multi_token_member():
+    syn = Synonyms([["반상회", "입주자대표회의"]])
+    assert syn.expansion_terms(["반상회"]) == ["입주자대표회의"]
+    assert syn.expansion_terms(["입주자", "대표", "회의"]) == ["반상회"]
+    assert syn.expansion_terms(["대표", "입주자"]) == []
+
+
+def test_expansion_terms_empty_synonyms():
+    assert Synonyms([]).expansion_terms(["a"]) == []

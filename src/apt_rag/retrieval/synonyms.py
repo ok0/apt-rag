@@ -38,6 +38,7 @@ class Synonyms:
         self._token_groups = [
             [t for t in (tuple(tokenize(term)) for term in g) if t] for g in self.groups
         ]
+        self._member_pairs = [[(term, tuple(tokenize(term))) for term in g] for g in self.groups]
 
     def __len__(self) -> int:
         return len(self.groups)
@@ -54,6 +55,17 @@ class Synonyms:
                         have.add(tok)
                         result.append(tok)
         return result
+
+    def expansion_terms(self, tokens: list[str]) -> list[str]:
+        terms: list[str] = []
+        for pairs in self._member_pairs:
+            members = [(term, toks) for term, toks in pairs if toks]
+            if not any(_contains(tokens, toks) for _, toks in members):
+                continue
+            for term, toks in members:
+                if not _contains(tokens, toks) and term not in terms:
+                    terms.append(term)
+        return terms
 
 
 def load_synonyms(path: Path | None) -> Synonyms:
