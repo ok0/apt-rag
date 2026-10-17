@@ -349,6 +349,13 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         matched = match_evidence(draft.evidence, hits)
         foreign = foreign_tokens(draft.answer, hits)
         cited_ans, unverified = check_citations(draft.answer, hits)
+        repaired = False
+        if matched is not None and unverified:
+            fixed = repair_few_shot_citations(draft.answer, unverified, hits, matched)
+            if fixed is not None:
+                draft = AnswerDraft(draft.answerable, draft.evidence, fixed)
+                cited_ans, unverified = check_citations(fixed, hits)
+                repaired = True
         notes, reasons = [], []
         if matched is None:
             notes.append(RETRY_NOTE_LEAK if few_shot_leak(draft.evidence) else RETRY_NOTE_EVIDENCE)
@@ -359,7 +366,7 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         if unverified:
             notes.append(RETRY_NOTE_REF.format(refs=", ".join(unverified)))
             reasons.append("citation")
-        attempts.append({"result": "+".join(reasons) or "ok", "evidence": draft.evidence})
+        attempts.append({"result": "+".join(reasons) or ("repaired" if repaired else "ok"), "evidence": draft.evidence})
         if not notes:
             wanted = set(cited_ans) | {hits[i].article_ref for i in matched}
             cited = [r for r in dict.fromkeys(h.article_ref for h in hits) if r in wanted]
@@ -483,6 +490,28 @@ def _match_without_parens(seg: str, normed: list[str], bare: list[str]) -> list[
 
 
 _FEW_SHOT_NORM = normalize_for_match("\n".join(m["content"] for m in FEW_SHOT))
+_FEW_SHOT_REFS = frozenset(_CITE.findall(re.sub(r"\s+", "", "\n".join(m["content"] for m in FEW_SHOT))))
+_CITE_PAREN = re.compile(r"\(([^()]*)\)")
+
+
+def repair_few_shot_citations(
+    answer: str, unverified: Sequence[str], hits: Sequence[SearchHit], matched: Sequence[int]
+) -> str | None:
+    if not unverified or not all(r in _FEW_SHOT_REFS for r in unverified):
+        return None
+    refs = list(dict.fromkeys(hits[i].article_ref for i in matched))
+    if len(refs) != 1:
+        return None
+    bad = set(unverified)
+
+    def _sub(m: re.Match[str]) -> str:
+        found = set(_CITE.findall(re.sub(r"\s+", "", m.group(1))))
+        return f"({refs[0]})" if found & bad else m.group(0)
+
+    fixed = _CITE_PAREN.sub(_sub, answer)
+    if check_citations(fixed, hits)[1]:
+        return None
+    return fixed
 
 
 def few_shot_leak(evidence: str) -> bool:

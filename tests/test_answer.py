@@ -21,11 +21,13 @@ from apt_rag.generation.answer import (
     check_citations,
     few_shot_leak,
     foreign_tokens,
+    generate_answer,
     load_history,
     match_evidence,
     parse_answer_json,
     parse_history,
     pure_refusal_text,
+    repair_few_shot_citations,
 )
 from apt_rag.generation.llm import LLMError
 from apt_rag.models import ChatTurn, SearchHit
@@ -585,16 +587,16 @@ def test_answer_evidence_and_language_notes_attached_together(settings):
 
 
 def test_answer_retries_on_unverified_citation(settings):
-    result, llm = _answer_with(settings, [reply("답입니다 (제904조제2항)"), reply("답 (제23조)")])
+    result, llm = _answer_with(settings, [reply("답입니다 (제99조제2항)"), reply("답 (제23조)")])
     assert len(llm.calls) == 2
-    assert llm.calls[1]["messages"][-1]["content"].endswith(RETRY_NOTE_REF.format(refs="제904조"))
+    assert llm.calls[1]["messages"][-1]["content"].endswith(RETRY_NOTE_REF.format(refs="제99조"))
     assert result.answer == "답 (제23조)"
     assert result.fallback is None
     assert result.unverified_refs == []
 
 
 def test_answer_unverified_citation_twice_falls_back(settings):
-    bad = reply("답입니다 (제904조제2항)")
+    bad = reply("답입니다 (제99조제2항)")
     result, llm = _answer_with(settings, [bad, bad])
     assert len(llm.calls) == 2
     assert result.fallback == "citation"
@@ -761,3 +763,43 @@ def test_answer_prompt_has_multi_article_rule():
     assert "앞에 놓인 조항이 정답이라는 보장은 없으니" in ANSWER_SYSTEM_PROMPT
     nums = [int(n) for n in re.findall(r"(?m)^(\d+)\. ", ANSWER_SYSTEM_PROMPT)]
     assert nums == list(range(1, 16))
+
+
+EV12 = "입주자등은 야간에 악기를 연주하여서는 아니 된다."
+
+
+def test_generate_answer_repairs_few_shot_citation():
+    hits = [make_hit(1, "제12조", text=f"제12조(소음) ① {EV12}")]
+    llm = FakeLLM([reply("허용되지 않습니다(제905조제2항).", evidence=EV12)])
+    g = generate_answer(llm, "밤에 악기 연주해도 되나요?", hits)
+    assert len(llm.calls) == 1
+    assert g.text == "허용되지 않습니다(제12조)."
+    assert g.cited_refs == ["제12조"]
+    assert g.fallback is None
+    assert [a["result"] for a in g.attempts] == ["repaired"]
+
+
+def test_generate_answer_no_repair_when_evidence_unmatched():
+    hits = [make_hit(1, "제12조", text=f"제12조(소음) ① {EV12}")]
+    bad = reply("허용되지 않습니다(제905조).", evidence="입주자등은 언제든지 악기를 연주할 수 있다.")
+    g = generate_answer(FakeLLM([bad, bad]), "밤에 악기 연주해도 되나요?", hits)
+    assert g.fallback == "evidence+citation"
+    assert g.text == NOT_FOUND_ANSWER
+
+
+def test_generate_answer_no_repair_when_evidence_spans_two_articles():
+    hits = [
+        make_hit(1, "제12조", text=f"제12조(소음) ① {EV12}"),
+        make_hit(2, "제13조", text="제13조(공고) 관리주체는 소음 관련 사항을 게시판에 공고하여야 한다."),
+    ]
+    ev = EV12 + "\n관리주체는 소음 관련 사항을 게시판에 공고하여야 한다."
+    bad = reply("허용되지 않습니다(제905조).", evidence=ev)
+    g = generate_answer(FakeLLM([bad, bad]), "밤에 악기 연주해도 되나요?", hits)
+    assert g.fallback == "citation"
+
+
+def test_repair_few_shot_citations_mixed_paren_and_outside_ref():
+    hits = [make_hit(1, "제12조", text=EV12)]
+    assert repair_few_shot_citations("안 됩니다(제12조, 제905조).", ["제905조"], hits, [0]) == "안 됩니다(제12조)."
+    assert repair_few_shot_citations("제905조에 따라 안 됩니다(제12조).", ["제905조"], hits, [0]) is None
+    assert repair_few_shot_citations("안 됩니다(제99조).", ["제99조"], hits, [0]) is None
