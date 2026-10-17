@@ -396,6 +396,17 @@ def test_match_evidence_one_segment_mismatch_returns_none():
     assert match_evidence(evidence, [hit]) is None
 
 
+def test_match_evidence_accepts_clause_cut_ending():
+    hits = [make_hit(1, "제12조", text="관리주체는 점검 결과를 게시판에 공고하여야 하며, 입주자등은 이를 열람할 수 있다.")]
+    assert match_evidence("관리주체는 점검 결과를 게시판에 공고하여야 한다.", hits) == [0]
+
+
+def test_match_evidence_clause_cut_does_not_flip_meaning():
+    hits = [make_hit(1, "제12조", text="입주자등은 관리 서류를 열람할 수 있으며, 복사를 요청할 수 있다.")]
+    assert match_evidence("입주자등은 관리 서류를 열람할 수 없다.", hits) is None
+    assert match_evidence("관리주체는 관리 서류를 공개하지 아니한다.", hits) is None
+
+
 def test_match_evidence_table_example():
     hit = make_hit(
         1,

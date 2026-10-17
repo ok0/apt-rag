@@ -561,6 +561,25 @@ def _matches_list_item(seg: str, blocks: list[tuple[str, str, list[str]]]) -> bo
     return False
 
 
+_CLAUSE_END_ALTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("한다", ("하며", "하고")),
+    ("된다", ("되며", "되고")),
+    ("이다", ("이며", "이고")),
+    ("있다", ("있으며", "있고")),
+    ("없다", ("없으며", "없고")),
+)
+
+
+def _match_clause_cut(n: str, normed: list[str]) -> list[int]:
+    for end, alts in _CLAUSE_END_ALTS:
+        if n.endswith(end):
+            stem = n[: -len(end)]
+            if len(stem) < MIN_EVIDENCE_CHARS:
+                return []
+            return [i for i, h in enumerate(normed) if any(stem + a in h for a in alts)]
+    return []
+
+
 def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None:
     normed = [normalize_for_match(h.text) for h in hits]
     bare = [normalize_for_match(strip_parentheticals(h.text)) for h in hits]
@@ -580,6 +599,8 @@ def match_evidence(evidence: str, hits: Sequence[SearchHit]) -> list[int] | None
             idx = [i for i, blocks in enumerate(lists) if _matches_list_item(n, blocks)]
         if not idx:
             idx = _match_without_parens(seg, normed, bare)
+        if not idx:
+            idx = _match_clause_cut(n, normed)
         if not idx:
             return None
         for i in idx:
