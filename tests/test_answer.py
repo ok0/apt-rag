@@ -740,3 +740,10 @@ def test_answer_records_attempts(settings):
     result, _ = _answer_with(settings, [reply("답 (제23조)", evidence="전혀 다른 문장입니다 본문 아님"), reply("답 (제23조)")])
     assert [a["result"] for a in result.attempts] == ["evidence", "ok"]
     assert result.attempts[0]["evidence"] == "전혀 다른 문장입니다 본문 아님"
+
+
+def test_answer_prompt_has_multi_article_rule():
+    assert "누가 누구에게 무엇을 하는지" in ANSWER_SYSTEM_PROMPT
+    assert "앞에 놓인 조항이 정답이라는 보장은 없으니" in ANSWER_SYSTEM_PROMPT
+    nums = [int(n) for n in re.findall(r"(?m)^(\d+)\. ", ANSWER_SYSTEM_PROMPT)]
+    assert nums == list(range(1, 16))
