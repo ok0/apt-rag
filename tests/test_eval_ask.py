@@ -269,6 +269,7 @@ def test_evaluate_answers_evidence_mismatch_twice_sets_fallback(settings, tmp_pa
     assert result.rows[2].fallback == "evidence"
     assert result.rows[2].category == "unanswerable_refused"
     assert result.rows[0].fallback is None
+    assert [a["result"] for a in result.rows[2].attempts] == ["evidence", "evidence"]
 
 
 def test_evaluate_answers_row_records_answerable_and_evidence(settings, tmp_path):

@@ -734,3 +734,9 @@ def test_answer_retry_uses_leak_note_when_evidence_copies_example(settings):
     assert len(llm.calls) == 2
     assert llm.calls[1]["messages"][-1]["content"].endswith(RETRY_NOTE_LEAK)
     assert result.fallback is None
+
+
+def test_answer_records_attempts(settings):
+    result, _ = _answer_with(settings, [reply("답 (제23조)", evidence="전혀 다른 문장입니다 본문 아님"), reply("답 (제23조)")])
+    assert [a["result"] for a in result.attempts] == ["evidence", "ok"]
+    assert result.attempts[0]["evidence"] == "전혀 다른 문장입니다 본문 아님"

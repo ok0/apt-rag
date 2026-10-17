@@ -4,7 +4,7 @@ import difflib
 import json
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from apt_rag.generation.llm import LLM, LLMError
@@ -274,6 +274,7 @@ class GeneratedAnswer:
     fallback: str | None = None
     answerable: bool | None = None
     evidence: str = ""
+    attempts: list[dict[str, str]] = field(default_factory=list)
 
 
 def _with_notes(messages: list[dict[str, str]], notes: list[str]) -> list[dict[str, str]]:
@@ -286,6 +287,7 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
     notes: list[str] = []
     reasons: list[str] = []
     last_draft: AnswerDraft | None = None
+    attempts: list[dict[str, str]] = []
     for _ in range(2):
         raw = llm.complete(
             ANSWER_SYSTEM_PROMPT,
@@ -299,12 +301,19 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         draft = parse_answer_json(raw)
         if draft is None:
             notes, reasons = [RETRY_NOTE_FORMAT], ["parse"]
+            attempts.append({"result": "parse", "evidence": ""})
             continue
         last_draft = draft
         if not draft.answerable:
-            return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], None, answerable=False, evidence=draft.evidence)
+            attempts.append({"result": "unanswerable", "evidence": draft.evidence})
+            return GeneratedAnswer(
+                NOT_FOUND_ANSWER, [], [], None, answerable=False, evidence=draft.evidence, attempts=attempts
+            )
         if pure_refusal_text(draft.answer) is not None:
-            return GeneratedAnswer(NOT_FOUND_ANSWER, [], [], None, answerable=True, evidence=draft.evidence)
+            attempts.append({"result": "refusal", "evidence": draft.evidence})
+            return GeneratedAnswer(
+                NOT_FOUND_ANSWER, [], [], None, answerable=True, evidence=draft.evidence, attempts=attempts
+            )
         matched = match_evidence(draft.evidence, hits)
         foreign = foreign_tokens(draft.answer, hits)
         cited_ans, unverified = check_citations(draft.answer, hits)
@@ -318,10 +327,13 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         if unverified:
             notes.append(RETRY_NOTE_REF.format(refs=", ".join(unverified)))
             reasons.append("citation")
+        attempts.append({"result": "+".join(reasons) or "ok", "evidence": draft.evidence})
         if not notes:
             wanted = set(cited_ans) | {hits[i].article_ref for i in matched}
             cited = [r for r in dict.fromkeys(h.article_ref for h in hits) if r in wanted]
-            return GeneratedAnswer(draft.answer, cited, unverified, None, answerable=True, evidence=draft.evidence)
+            return GeneratedAnswer(
+                draft.answer, cited, unverified, None, answerable=True, evidence=draft.evidence, attempts=attempts
+            )
     return GeneratedAnswer(
         NOT_FOUND_ANSWER,
         [],
@@ -329,6 +341,7 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         "+".join(reasons),
         answerable=last_draft.answerable if last_draft else None,
         evidence=last_draft.evidence if last_draft else "",
+        attempts=attempts,
     )
 
 

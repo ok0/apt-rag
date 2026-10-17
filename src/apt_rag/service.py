@@ -219,6 +219,7 @@ def answer(
         fallback=gen.fallback,
         answerable=gen.answerable,
         evidence=gen.evidence,
+        attempts=gen.attempts,
     )
 
 
@@ -320,6 +321,7 @@ def evaluate_answers(
                 fallback=res.fallback,
                 answerable=res.answerable,
                 evidence=res.evidence,
+                attempts=list(res.attempts),
             )
             rows.append(row)
             partial.write(json.dumps(asdict(row), ensure_ascii=False) + "\n")

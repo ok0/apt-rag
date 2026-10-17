@@ -170,6 +170,7 @@ class AskEvalRow:
     fallback: str | None = None
     answerable: bool | None = None
     evidence: str = ""
+    attempts: list[dict[str, str]] = field(default_factory=list)  # 생성 시도별 {"result": ok|parse|unanswerable|refusal|evidence+citation…, "evidence": ...}
 
 
 @dataclass
@@ -217,3 +218,4 @@ class AnswerResult:
     fallback: str | None = None       # 검증 실패로 거절 문구로 대체한 이유(parse|evidence|language, '+'로 결합), 아니면 None
     answerable: bool | None = None
     evidence: str = ""
+    attempts: list[dict[str, str]] = field(default_factory=list)  # 생성 시도별 {"result": ok|parse|unanswerable|refusal|evidence+citation…, "evidence": ...}
