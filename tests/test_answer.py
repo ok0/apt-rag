@@ -16,8 +16,10 @@ from apt_rag.generation.answer import (
     RETRY_NOTE_EVIDENCE,
     RETRY_NOTE_FORMAT,
     RETRY_NOTE_KOREAN,
+    RETRY_NOTE_LEAK,
     RETRY_NOTE_REF,
     check_citations,
+    few_shot_leak,
     foreign_tokens,
     load_history,
     match_evidence,
@@ -710,3 +712,25 @@ def test_answer_parse_failure_twice_leaves_answerable_none(settings):
 
 def test_answer_prompt_has_paraphrase_rule():
     assert "일상 표현" in ANSWER_SYSTEM_PROMPT
+
+
+FEW_SHOT_EVIDENCE = [e for e in (json.loads(m["content"])["evidence"] for m in FEW_SHOT if m["role"] == "assistant") if e]
+
+
+def test_few_shot_leak_detects_example_evidence():
+    assert FEW_SHOT_EVIDENCE
+    assert all(few_shot_leak(e) for e in FEW_SHOT_EVIDENCE)
+    e = FEW_SHOT_EVIDENCE[1]
+    assert few_shot_leak(e[:10] + "소통 및 화합을 위하여 " + e[10:])
+
+
+def test_few_shot_leak_false_for_ordinary_sentence():
+    assert not few_shot_leak("관리주체는 승인받은 예산에 따라 관리비등을 집행한다.")
+    assert not few_shot_leak("")
+
+
+def test_answer_retry_uses_leak_note_when_evidence_copies_example(settings):
+    result, llm = _answer_with(settings, [reply("답 (제23조)", evidence=FEW_SHOT_EVIDENCE[1]), reply("답 (제23조)")])
+    assert len(llm.calls) == 2
+    assert llm.calls[1]["messages"][-1]["content"].endswith(RETRY_NOTE_LEAK)
+    assert result.fallback is None

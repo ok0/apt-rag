@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import json
 import re
 from collections.abc import Sequence
@@ -251,7 +252,8 @@ FEW_SHOT: list[dict[str, str]] = [
 ]
 
 RETRY_NOTE_FORMAT = "주의: 직전 응답이 형식에 맞지 않았습니다. answerable, evidence, answer 세 키를 가진 JSON 하나만 출력하세요."
-RETRY_NOTE_EVIDENCE = "주의: evidence는 <조항> 본문의 문장을 한 글자도 바꾸지 말고 그대로 복사해야 합니다. 그대로 옮길 근거 문장이 없으면 answerable을 false로 하세요."
+RETRY_NOTE_EVIDENCE = "주의: evidence는 마지막 사용자 메시지의 <조항> 본문에서 문장을 한 글자도 바꾸지 말고 그대로 복사해야 합니다. 앞선 예시 대화의 문장은 쓰지 마세요. 그대로 옮길 근거 문장이 없으면 answerable을 false로 하세요."
+RETRY_NOTE_LEAK = "주의: 직전 evidence는 앞선 예시 대화의 조항 문장이며 근거가 아닙니다. 마지막 사용자 메시지의 <조항>에서 질문에 답하는 문장을 찾아 그대로 복사하고, 그런 문장이 없으면 answerable을 false로 하세요."
 RETRY_NOTE_KOREAN = "주의: answer는 반드시 한국어로만 작성하세요. 중국어, 일본어, 한자, 영어 단어를 섞지 마세요."
 RETRY_NOTE_REF = '주의: answer에 쓴 조항 번호 {refs}는 위 <조항>에 없습니다. 괄호 안 조항 번호는 <조항 번호="..."> 속성에 적힌 번호만 쓰고, 앞선 예시 대화의 조항 번호는 쓰지 마세요.'
 
@@ -308,7 +310,7 @@ def generate_answer(llm: LLM, question: str, hits: Sequence[SearchHit]) -> Gener
         cited_ans, unverified = check_citations(draft.answer, hits)
         notes, reasons = [], []
         if matched is None:
-            notes.append(RETRY_NOTE_EVIDENCE)
+            notes.append(RETRY_NOTE_LEAK if few_shot_leak(draft.evidence) else RETRY_NOTE_EVIDENCE)
             reasons.append("evidence")
         if foreign:
             notes.append(RETRY_NOTE_KOREAN)
@@ -382,6 +384,7 @@ _LIST_HEAD = re.compile(r"다음\s*각\s*호")
 _LIST_ITEM = re.compile(r"^\s*\d+\.\s*(\S.*)$")
 _LIST_JOSA = "을를이가은는"
 _PAREN = re.compile(r"\([^()]*\)")
+LEAK_MIN_CHARS = 20
 
 
 @dataclass
@@ -432,6 +435,20 @@ def _match_without_parens(seg: str, normed: list[str], bare: list[str]) -> list[
         return []
     inner = [normalize_for_match(m.group(0)) for m in _PAREN.finditer(seg)]
     return [i for i in range(len(normed)) if core in bare[i] and all(x in normed[i] for x in inner)]
+
+
+_FEW_SHOT_NORM = normalize_for_match("\n".join(m["content"] for m in FEW_SHOT))
+
+
+def few_shot_leak(evidence: str) -> bool:
+    for raw in _SEG_SPLIT.split(evidence):
+        n = normalize_for_match(raw)
+        if len(n) < MIN_EVIDENCE_CHARS:
+            continue
+        sm = difflib.SequenceMatcher(None, n, _FEW_SHOT_NORM, autojunk=False)
+        if sm.find_longest_match(0, len(n), 0, len(_FEW_SHOT_NORM)).size >= LEAK_MIN_CHARS:
+            return True
+    return False
 
 
 def _list_blocks(text: str) -> list[tuple[str, str, list[str]]]:
