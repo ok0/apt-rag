@@ -74,6 +74,17 @@ class Searcher:
             self._loaded = (collection, chunks, bm25)
         return self._loaded
 
+    def _expanded_sims(self, collection: Collection, query: str, tokens: list[str], n: int) -> dict[str, float]:
+        terms = self._synonyms.expansion_terms(tokens)
+        if not terms:
+            return {}
+        res = collection.query(
+            query_embeddings=[self._embedder.embed_query(query + " " + " ".join(terms))],
+            n_results=n,
+            include=["distances"],
+        )
+        return {cid: 1.0 - float(dist) for cid, dist in zip(res["ids"][0], res["distances"][0])}
+
     def _band_candidates(self, ids: list[str], sims: dict[str, float], bm_ids: list[str], cutoff: float) -> list[str]:
         band = self._settings.sim_band
         k = self._settings.band_top_k
@@ -96,7 +107,16 @@ class Searcher:
         )
         ids = list(res["ids"][0])
         sims = {cid: 1.0 - float(dist) for cid, dist in zip(ids, res["distances"][0])}
-        bm_tokens = self._synonyms.expand_tokens(tokenize(query))
+        q_tokens = tokenize(query)
+        boosted = {
+            cid: s
+            for cid, s in self._expanded_sims(collection, query, q_tokens, n).items()
+            if s >= cutoff and s > sims.get(cid, -1.0)
+        }
+        if boosted:
+            sims.update(boosted)
+            ids = sorted(sims, key=lambda c: sims[c], reverse=True)[:n]
+        bm_tokens = self._synonyms.expand_tokens(q_tokens)
         bm_ids = [cid for cid, _ in bm25.search_tokens(bm_tokens, CANDIDATES)]
         band_ids: set[str] = set()
         if cutoff > 0:

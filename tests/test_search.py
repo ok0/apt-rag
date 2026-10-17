@@ -305,6 +305,75 @@ def test_min_sim_zero_ignores_band(settings):
     assert top.vec_rank == 1
 
 
+class TwoQueryEmbedder:
+    model_name = "fake-two-query"
+
+    def __init__(self, sims: dict[str, tuple[float, float]], marker: str, default=(0.10, 0.10)):
+        self.sims, self.marker, self.default = sims, marker, default
+        self.queries: list[str] = []
+
+    def _doc(self, text):
+        a, b = next((v for ref, v in self.sims.items() if f"[{ref}]" in text), self.default)
+        return [a, b, max(0.0, 1 - a * a - b * b) ** 0.5, 0.0]
+
+    def embed_documents(self, texts):
+        return [self._doc(t) for t in texts]
+
+    def embed_query(self, text):
+        self.queries.append(text)
+        return [0.0, 1.0, 0.0, 0.0] if self.marker in text else [1.0, 0.0, 0.0, 0.0]
+
+
+def expansion_setup(settings, base_sim, exp_sim, synonyms=(("베란다", "발코니"),)):
+    chunks = [
+        make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
+        make_chunk(1, "제93조", "세대 발코니 관리 기준"),
+        make_chunk(2, "제19조", "발코니 수선 수선 공사 절차"),
+        make_chunk(3, "제6조", "주차장 이용 시간은 별도로 정한다."),
+        make_chunk(4, "제7조", "관리비 납부 기한을 정한다."),
+    ]
+    emb = TwoQueryEmbedder({"제93조": (base_sim, exp_sim), "제19조": (0.40, 0.40)}, marker="발코니")
+    s = dataclasses.replace(settings, min_vec_sim=0.55, sim_band=0.05, band_top_k=5)
+    build(s, emb, chunks)
+    emb.queries.clear()
+    return Searcher(s, emb, synonyms=Synonyms([list(g) for g in synonyms])), emb
+
+
+def test_expanded_query_passes_strict_cutoff(settings):
+    searcher, emb = expansion_setup(settings, 0.45, 0.60)
+    hits = searcher.search("베란다 수선", 5)
+    assert hits[0].article_ref == "제93조"
+    assert hits[0].via_band is False
+    assert hits[0].vec_rank == 1
+    assert hits[0].vec_sim == pytest.approx(0.60, abs=1e-3)
+    assert len(emb.queries) == 2
+
+
+def test_expanded_query_in_band_range_does_not_rescue(settings):
+    searcher, _ = expansion_setup(settings, 0.45, 0.53)
+    assert searcher.search("베란다 수선", 5) == []
+
+
+def test_no_synonym_match_skips_expanded_query(settings):
+    searcher, emb = expansion_setup(settings, 0.45, 0.60, synonyms=())
+    assert searcher.search("베란다 수선", 5) == []
+    assert len(emb.queries) == 1
+
+
+def test_original_sim_kept_when_higher(settings):
+    searcher, _ = expansion_setup(settings, 0.62, 0.30)
+    hits = searcher.search("베란다 수선", 5)
+    assert hits[0].article_ref == "제93조"
+    assert hits[0].vec_sim == pytest.approx(0.62, abs=1e-3)
+
+
+def test_min_sim_zero_uses_higher_of_both(settings):
+    searcher, _ = expansion_setup(settings, 0.45, 0.60)
+    hits = searcher.search("베란다 수선", 5, min_sim=0)
+    top = next(h for h in hits if h.article_ref == "제93조")
+    assert top.vec_sim == pytest.approx(0.60, abs=1e-3)
+
+
 def test_expand_context_adds_referenced_appendix(settings, hash_embedder):
     chunks = [
         make_chunk(0, "제1조", "이 규약은 목적을 정한다."),
